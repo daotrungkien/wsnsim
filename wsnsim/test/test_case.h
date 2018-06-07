@@ -7,17 +7,33 @@
 
 class test_case {
 public:
+	struct command_item {
+		std::string cmd;
+		std::function<void(const std::string&, const std::vector<std::string>&)> action;
+	};
+
 	std::shared_ptr<wsn::generic_world<wsn::basic_network>> world;
 
 	int trial = 1;
 	bool logging = true;
 	std::ofstream logger;
 
-	inline static std::shared_ptr<test_case> instant;
+	std::list<command_item> commands;
+
+	inline static std::shared_ptr<test_case> instance;
 
 
 	void init() {
 		if (logging) init_log_file();
+
+		add_command("start", [this]() { world->start(); });
+		add_command("stop", [this] { world->stop(); });
+		add_command("clear-log", [this] { init_log_file(); });
+		add_command("new-trial", [this] {
+			trial++;
+			init_log_file();
+		});
+		add_command("node-info", [this] (auto& cmd, auto& args) { node_info(world, args); });
 	}
 
 	void init_log_file() {
@@ -29,6 +45,67 @@ public:
 		if (!logger) std::cout << "Log file creation failed" << std::endl;
 		else logging = true;
 	}
+
+	void add_command(const std::string& cmd, std::function<void(const std::string&, const std::vector<std::string>&)> action) {
+		commands.push_back({ cmd, action });
+	}
+
+	void add_command(const std::string& cmd, std::function<void()> action) {
+		add_command(cmd, [action](const std::string&, const std::vector<std::string>&) {
+			action();
+		});
+	}
+
+	bool process_command(const std::string& cmd, const std::vector<std::string>& args) {
+		auto itr = std::find_if(commands.begin(), commands.end(), [&cmd](auto& e) {
+			return e.cmd == cmd;
+		});
+		if (itr == commands.end()) return false;
+
+		itr->action(cmd, args);
+		return true;
+	}
+
+
+	void node_info(std::shared_ptr<wsn::basic_world> w, const std::vector<std::string>& args) {
+		if (args.size() < 1 || args.size() > 2) {
+			std::cout << "node-info all|node-name [>file]" << std::endl;
+			return;
+		}
+
+		bool to_file = false;
+		std::ofstream file;
+		if (args.size() == 2) {
+			if (args[1] != ">file") {
+				std::cout << "Last argument must be '>file'" << std::endl;
+				return;
+			}
+
+			file.open(kutils::formatstr("wsnsim-log-%s-nodes.txt", get_test_name().c_str()), std::ios::out);
+			if (!file) {
+				std::cout << "Output file creation failed" << std::endl;
+				return;
+			}
+
+			to_file = true;
+		}
+
+		if (args[0] == "all") {
+			w->get_network()->each_node([this, to_file, &file](auto node) {
+				print_node_info(node, to_file ? file : std::cout);
+			});
+		}
+		else {
+			auto node = w->get_network()->node_by_name(args[0]);
+			if (!node) {
+				std::cout << "Node not found: " << args[0] << std::endl;
+				return;
+			}
+
+			print_node_info(node, to_file ? file : std::cout);
+		}
+	}
+
 
 	virtual std::string get_test_name() const {
 		return "test";

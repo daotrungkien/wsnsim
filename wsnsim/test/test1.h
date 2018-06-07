@@ -14,8 +14,8 @@ namespace test1 {
 
 	inline void log_info(shared_ptr<basic_node> node)
 	{
-		if (!test_case::instant->logging) return;
-		test_case::instant->logger << node->get_world_clock_time() << "\t"
+		if (!test_case::instance->logging) return;
+		test_case::instance->logger << node->get_world_clock_time() << "\t"
 			<< node->get_name() << "\t"
 			<< node->get_battery()->get_capacity() << endl;
 	}
@@ -192,15 +192,11 @@ namespace test1 {
 		}
 
 
-		bool custom_command(const string& cmd, const vector<string>& args) override {
-			return false;
-		}
-
 		static void create_test_case()
 		{
 			auto tc = make_shared<custom_test_case>();
 			tc->init();
-			test_case::instant = tc;
+			test_case::instance = tc;
 		}
 	};
 

@@ -274,22 +274,28 @@ namespace wsn {
 		}).detach();
 	}
 
-	void basic_comm::broadcast(const std::vector<uchar>& data, std::function<bool(std::shared_ptr<basic_node>)> condition)
+	void basic_comm::broadcast(const std::vector<uchar>& data, std::function<bool(std::shared_ptr<basic_node>)> condition,
+		std::function<void(std::shared_ptr<basic_node>)> sender)
 	{
 		auto network = get_network();
 		auto nodes = network->find_nodes(condition);
-		std::for_each(std::execution::par, nodes.begin(), nodes.end(), [&data, this](auto& node) {
-			if (!is_same(node->get_comm())) send(data, node);
+		std::for_each(std::execution::par, nodes.begin(), nodes.end(), [&data, this, sender](auto& node) {
+			if (!is_same(node->get_comm())) {
+				if (sender == nullptr)
+					send(data, node);
+				else sender(node);
+			}
 		});
 	}
 
-	void basic_comm::broadcast_by_distance(const std::vector<uchar>& data, double range)
+	void basic_comm::broadcast_by_distance(const std::vector<uchar>& data, double range,
+		std::function<void(std::shared_ptr<basic_node>)> sender)
 	{
 		auto& loc = get_node()->get_location();
 
 		broadcast(data, [&loc, range](auto node) {
 			return node->get_location().distance_to(loc) <= range;
-		});
+		}, sender);
 	}
 
 

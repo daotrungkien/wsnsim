@@ -18,8 +18,8 @@ namespace test2 {
 
 
 	inline void log_info(shared_ptr<basic_node> node, shared_ptr<basic_node> from, double t, const char* action) {
-		if (!test_case::instant->logging) return;
-		test_case::instant->logger << (t - measure_time) << "\t"
+		if (!test_case::instance->logging) return;
+		test_case::instance->logger << (t - measure_time) << "\t"
 			<< node->get_name() << "\t"
 			<< (from ? from->get_name() : "-") << "\t"
 			<< action << endl;
@@ -50,30 +50,30 @@ namespace test2 {
 				}
 			});
 
-			node->on(basic_comm::event_receive, [node](event& ev, std::reference_wrapper<const std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
+			node->on(basic_comm::event_receive, [node](event& ev, std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
 				double t = node->get_world_clock_time();
 
 				lock_guard lock(writemx);
 				cout << format_time(t) << ": Node " << node->get_name() << " (" << node->get_id() << ") received from "
-					<< from->get_name() << " (" << from->get_id() << "): " << std::string(data.get().begin(), data.get().end()) << endl;
+					<< from->get_name() << " (" << from->get_id() << "): " << std::string(data->begin(), data->end()) << endl;
 				log_info(node, from, t, "receive");
 			});
 
-			node->on(basic_comm::event_forward, [node](event& ev, std::reference_wrapper<const std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
+			node->on(basic_comm::event_forward, [node](event& ev, std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
 				double t = node->get_world_clock_time();
 
 				lock_guard lock(writemx);
 				cout << format_time(t) << ": Node " << node->get_name() << " (" << node->get_id() << ") forwarded "
-					<< data.get().size() << " bytes for " << from->get_name() << " (" << from->get_id() << ")" << endl;
+					<< data->size() << " bytes for " << from->get_name() << " (" << from->get_id() << ")" << endl;
 				log_info(node, from, t, "forward");
 			});
 
-			node->on(basic_comm::event_drop, [node](event& ev, std::reference_wrapper<const std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
+			node->on(basic_comm::event_drop, [node](event& ev, std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) {
 				double t = node->get_world_clock_time();
 
 				lock_guard lock(writemx);
 				cout << format_time(t) << ": Node " << node->get_name() << " (" << node->get_id() << ") dropped "
-					<< data.get().size() << " bytes from " << from->get_name() << " (" << from->get_id() << ")" << endl;
+					<< data->size() << " bytes from " << from->get_name() << " (" << from->get_id() << ")" << endl;
 				log_info(node, from, t, "drop");
 			});
 		}
@@ -178,69 +178,63 @@ namespace test2 {
 						<< "Node " << n->get_name() << " (" << n->get_id() << ") stopped" << endl;
 				}
 			});
-		}
 
 
-		bool custom_command(const string& cmd, const vector<string>& args) override {
-			if (cmd == "measure") {
+			add_command("measure", [this] (auto& cmd, auto& args) {
 				if (args.size() != 1) {
 					cout << cmd << " node-name" << endl;
-					return true;
+					return;
 				}
 
 				auto node = world->get_network()->node_by_name(args[0]);
 				if (!node) {
 					cout << "Node node found: " << args[0] << endl;
-					return true;
+					return;
 				}
 
 				node->get_sensor()->measure();
+			});
 
-			}
-			else if (cmd == "set-range") {
+			add_command("set-range", [this](auto& cmd, auto& args) {
 				if (args.size() != 1) {
 					cout << cmd << " range" << endl;
-					return true;
+					return;
 				}
 
 				world->get_network()->each_node([range = stod(args[0])](auto node) {
 					dynamic_pointer_cast<temp_node>(node)->get_comm_t()->set_broadcast_range(range);
 				});
-
-			}
-			else if (cmd == "set-htl") {
+			});
+			
+			add_command("set-htl", [this](auto& cmd, auto& args) {
 				if (args.size() != 1) {
 					cout << cmd << " hops" << endl;
-					return true;
+					return;
 				}
 
 				world->get_network()->each_node([hops = stoi(args[0])](auto node) {
 					dynamic_pointer_cast<temp_node>(node)->get_comm_t()->set_hops_to_live(hops);
 				});
-
-			}
-			else if (cmd == "set-loss-rate") {
+			});
+			
+			add_command("set-loss-rate", [this](auto& cmd, auto& args) {
 				if (args.size() != 1) {
 					cout << cmd << " loss-rate" << endl;
-					return true;
+					return;
 				}
 
 				world->get_network()->each_node([rate = stod(args[0])](auto node) {
 					dynamic_pointer_cast<temp_node>(node)->get_comm_t()->set_loss_rate(rate);
 				});
-
-
-			}
-			else return false;
-
-			return true;
+			});
 		}
+
 
 		static void create_test_case()
 		{
 			auto tc = make_shared<custom_test_case>();
 			tc->init();
-			test_case::instant = tc;
+			test_case::instance = tc;
 		}
 	};
 

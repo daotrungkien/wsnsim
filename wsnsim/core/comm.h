@@ -44,7 +44,7 @@ namespace wsn::comm {
 		}
 
 		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
-			this->fire(basic_comm::event_send, make_shared_data(data), to);
+			this->fire(basic_comm::event_send, this->make_shared_data(data), to);
 
 			auto tto = std::dynamic_pointer_cast<comm::with_delay<wrapped_comm_type>>(to->get_comm());
 			assert(tto);
@@ -53,7 +53,7 @@ namespace wsn::comm {
 
 			std::chrono::duration<double> delay = sender_base + tto->receiver_base + (multiplier * distance) +
 				std::chrono::duration<double>(random(random_generator));
-			this->timer_once(delay, true, [newdata = data, to, this](event&) {
+			this->timer_once(delay, true, [newdata = this->make_shared_data(data), to, this](event&) {
 				to->get_comm()->receive(newdata, this->get_node());
 			});
 		}
@@ -161,16 +161,19 @@ namespace wsn::comm {
 			});
 		}
 
-		void receive(const std::vector<uchar>& data, std::shared_ptr<basic_node> from) override {
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!wrapped_comm_type::receive(data, from)) return false;
+
 			header hdr;
-			this->extract_info_from_data(data, hdr);
+			this->extract_header(*data, hdr);
+			this->remove_header(*data, sizeof(hdr));
 
 			{
 				std::lock_guard lock(buffer_mutex);
 				// make sure no duplicate when something goes wrong!
 				auto range = buffer.equal_range(hdr.msg_id);
 				for (auto itr = range.first; itr != range.second; itr++) {
-					if (itr->second->pkg_id == hdr.pkg_id) return;
+					if (itr->second->pkg_id == hdr.pkg_id) return false;
 				}
 
 				// push package to buffer
@@ -178,14 +181,14 @@ namespace wsn::comm {
 				inf->arrival_time = this->get_local_clock_time();
 				inf->pkg_count = hdr.pkg_count;
 				inf->pkg_id = hdr.pkg_id;
-				inf->data = this->remove_info_from_data(data, sizeof(hdr));
+				inf->data = *data;
 
 				buffer.emplace(hdr.msg_id, inf);
 			}
 
-			std::vector<uchar> orgdata;
-			if (reconstruct_data(hdr.msg_id, orgdata))
-				wrapped_comm_type::receive(orgdata, from);
+			auto orgdata = std::make_shared<std::vector<uchar>>();
+			bool ok = reconstruct_data(hdr.msg_id, *orgdata);
+			if (ok) data = orgdata;
 
 			// remove expired packages!
 			double good_arrival_time = this->get_local_clock_time() - time_to_keep;
@@ -197,6 +200,8 @@ namespace wsn::comm {
 					else itr++;
 				}
 			}
+
+			return ok;
 		}
 	};
 
@@ -220,9 +225,9 @@ namespace wsn::comm {
 			return rate;
 		}
 
-		void receive(const std::vector<uchar>& data, std::shared_ptr<basic_node> from) override {
-			if (random(random_generator) <= rate) return;
-			wrapped_comm_type::receive(data, from);
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (random(random_generator) <= rate) return false;
+			return wrapped_comm_type::receive(data, from);
 		}
 	};
 
@@ -259,21 +264,23 @@ namespace wsn::comm {
 		}
 
 
-		void receive(const std::vector<uchar>& data, std::shared_ptr<basic_node> from) override {
-			auto& hdr = this->extract_info_from_data<header>(data);
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!wrapped_comm_type::receive(data, from)) return false;
+
+			auto& hdr = this->extract_header<header>(*data);
 
 			// avoid receiving multiple times
 			{
 				std::lock_guard lock(last_messages_mutex);
 				if (std::find_if(last_messages.begin(), last_messages.end(), [&hdr](auto& e) {
 					return hdr.node_id == e.node_id && hdr.msg_id == e.msg_id;
-				}) != last_messages.end()) return;
+				}) != last_messages.end()) return false;
 
 				add_last_message(hdr);
 			}
 
-			auto orgdata = this->remove_info_from_data(data, sizeof(hdr));
-			wrapped_comm_type::receive(orgdata, from);
+			this->remove_header(*data, sizeof(hdr));
+			return true;
 		}
 
 
@@ -287,7 +294,8 @@ namespace wsn::comm {
 				add_last_message(hdr);
 			}
 
-			auto newdata = this->add_info_to_data(data, hdr);
+			auto newdata = data;
+			this->add_header(newdata, hdr);
 			wrapped_comm_type::send(newdata, to);
 		}
 
@@ -302,7 +310,8 @@ namespace wsn::comm {
 				add_last_message(hdr);
 			}
 
-			auto newdata = this->add_info_to_data(data, hdr);
+			auto newdata = data;
+			this->add_header(newdata, hdr);
 			wrapped_comm_type::route(newdata, to);
 		}
 	};
@@ -350,22 +359,22 @@ namespace wsn::comm {
 		}
 
 
-		void receive(const std::vector<uchar>& data, std::shared_ptr<basic_node> from) override {
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!wrapped_comm_type::receive(data, from)) return false;
+
 			header hdr;
-			this->extract_info_from_data(data, hdr);
+			this->extract_header(*data, hdr);
 
-			if (hdr.dest_id == this->get_node()->get_id()) {
-				wrapped_comm_type::receive(data, from);
-				return;
+			if (hdr.dest_id == this->get_node()->get_id()) return true;
+
+			if (neighbors.size() > 0) {
+				std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, data](auto p) {
+					wrapped_comm_type::send(*data, p);
+				});
+
+				this->fire(basic_comm::event_forward, data, from);
 			}
-
-			if (neighbors.size() == 0) return;
-
-			std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, &data](auto p) {
-				wrapped_comm_type::send(data, p);
-			});
-
-			this->fire(basic_comm::event_forward, std::cref(data), from);
+			return true;
 		}
 
 		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
@@ -378,7 +387,8 @@ namespace wsn::comm {
 			header hdr;
 			hdr.dest_id = to->get_id();
 
-			auto newdata = this->add_info_to_data(data, hdr);
+			auto newdata = data;
+			this->add_header(newdata, hdr);
 			std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, &newdata](auto p) {
 				wrapped_comm_type::send(newdata, p);
 			});
@@ -427,35 +437,39 @@ namespace wsn::comm {
 		}
 
 
-		void receive(const std::vector<uchar>& data, std::shared_ptr<basic_node> from) override {
-			auto& hdr = this->extract_info_from_data<header>(data);
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!wrapped_comm_type::receive(data, from)) return false;
+
+			auto& hdr = this->extract_header<header>(*data);
 
 			// the message is to me!
 			if (hdr.dest_id == this->get_node()->get_id()) {
-				auto orgdata = this->remove_info_from_data(data, sizeof(hdr));
-				wrapped_comm_type::receive(orgdata, from);
-				return;
+				this->remove_header(*data, sizeof(hdr));
+				return true;
 			}
 
 			// forward if not expired
-			std::vector<uchar> newdata = data;
-			auto& newhdr = this->extract_info_from_data<header>(newdata);
+			auto newdata = *data;
+			auto& newhdr = this->extract_header<header>(newdata);
 
 			if (newhdr.time_to_live > 0 && this->get_world_clock_time() - newhdr.time_to_live >= newhdr.transmission_time) {
-				this->fire(basic_comm::event_drop, std::cref(data), from);
-				return;
+				this->fire(basic_comm::event_drop, data, from);
+				return false;
 			}
 
 			if (newhdr.hops_to_live == 0 || newhdr.hops_to_live == 1) {
-				this->fire(basic_comm::event_drop, std::cref(data), from);
-				return;
+				this->fire(basic_comm::event_drop, data, from);
+				return false;
 			}
 			else if (newhdr.hops_to_live > 1) {
 				newhdr.hops_to_live--;
 			}
 
-			this->fire(basic_comm::event_forward, std::cref(newdata), from);
-			this->broadcast_by_distance(newdata, broadcast_range);
+			this->fire(basic_comm::event_forward, this->make_shared_data(newdata), from);
+			this->broadcast_by_distance(newdata, broadcast_range, [this, &newdata](auto p) {
+				wrapped_comm_type::send(newdata, p);
+			});
+			return false;
 		}
 
 		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
@@ -471,8 +485,11 @@ namespace wsn::comm {
 			hdr.time_to_live = time_to_live;
 			hdr.hops_to_live = hops_to_live;
 
-			auto newdata = this->add_info_to_data(data, hdr);
-			this->broadcast_by_distance(newdata, broadcast_range);
+			auto newdata = data;
+			this->add_header(newdata, hdr);
+			this->broadcast_by_distance(newdata, broadcast_range, [this, &newdata](auto p) {
+				wrapped_comm_type::send(newdata, p);
+			});
 		}
 	};
 
