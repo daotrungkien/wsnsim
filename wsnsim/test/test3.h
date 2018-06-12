@@ -87,11 +87,11 @@ namespace test3 {
 
 
 
-	class custom_comm : public 
-		comm::with_loss<
+	class custom_comm : public
 		comm::packaged<
-		comm::loop_avoidance<
 		comm::fix_routing<
+		comm::loop_avoidance<
+		comm::with_loss<
 		comm::with_delay<
 		basic_comm>>>>> {
 	public:
@@ -186,12 +186,12 @@ namespace test3 {
 					if (nb->is_same(master_node)) continue;
 
 					auto comm = dynamic_pointer_cast<temp_node>(nb)->get_comm_t();
-					if (comm->get_neighbors().size() >= 1) continue;
+					if (comm->get_neighbors().size() >= 3) continue;
 					if (comm->has_neighbor(n)) continue;
 
 					comm->add_neighbor(n);
 					set_neighbors(nb);
-					if (++i == 1) break;
+					if (++i == 3) break;
 				}
 			};
 

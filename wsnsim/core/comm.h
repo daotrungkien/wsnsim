@@ -242,16 +242,38 @@ namespace wsn::comm {
 			uint msg_id;
 		};
 
+		struct header_info {
+			double arrival_time;
+			uint node_id;
+			uint msg_id;
+		};
+
 		uint msg_id = 1;
+
 		std::mutex last_messages_mutex;
-		std::vector<header> last_messages;
-		uint last_messages_max = 10;
+		std::vector<header_info> last_messages;
+		uint last_messages_max = 100;	// max length, disabled by default
+		double last_messages_time = 30;	// seconds, disabled by default
 
 		void add_last_message(const header& hdr) {
-			last_messages.push_back(hdr);
+			header_info inf;
+			inf.arrival_time = this->get_local_clock_time();
+			inf.node_id = hdr.node_id;
+			inf.msg_id = hdr.msg_id;
+			last_messages.push_back(inf);
 
-			while (last_messages.size() > last_messages_max)
-				last_messages.erase(last_messages.end() - 1);
+			if (last_messages_max >= 0) {
+				while (last_messages.size() > last_messages_max)
+					last_messages.erase(last_messages.end() - 1);
+			}
+
+			if (last_messages_time >= 0) {
+				double last_good_time = this->get_local_clock_time() - last_messages_time;
+				auto itr = std::remove_if(last_messages.begin(), last_messages.end(), [last_good_time](auto& e) {
+					return e.arrival_time < last_good_time;
+				});
+				last_messages.erase(itr, last_messages.end());
+			}
 		}
 
 	public:
@@ -261,6 +283,14 @@ namespace wsn::comm {
 
 		void set_max_last_messages(uint v) {
 			last_messages_max = v;
+		}
+
+		uint get_last_messages_time() const {
+			return last_messages_time;
+		}
+
+		void set_last_messages_time(double v) {
+			last_messages_time = v;
 		}
 
 
@@ -407,7 +437,7 @@ namespace wsn::comm {
 			int time_to_live;	// time to live in seconds, -1 means unused
 		};
 
-		double broadcast_range = 1.;
+		double broadcast_range = 1.;	// in meters
 		int hops_to_live = -1;
 		int time_to_live = -1;
 
