@@ -90,10 +90,9 @@ namespace test3 {
 	class custom_comm : public
 		comm::packaged<
 		comm::fix_routing<
-		comm::loop_avoidance<
 		comm::with_loss<
 		comm::with_delay<
-		basic_comm>>>>> {
+		basic_comm>>>> {
 	public:
 		void init() override {
 			on_self(event_first_start, [this](event& ev) {

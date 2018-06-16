@@ -234,32 +234,23 @@ namespace wsn::comm {
 
 
 
-	template <typename wrapped_comm_type>
+	template <typename msg_id_type, typename wrapped_comm_type>
 	class loop_avoidance : public wrapped_comm_type {
 	protected:
-		struct header {
-			uint node_id;
-			uint msg_id;
-		};
-
-		struct header_info {
+		struct msg_info {
 			double arrival_time;
-			uint node_id;
-			uint msg_id;
+			msg_id_type msg_id;
 		};
-
-		uint msg_id = 1;
 
 		std::mutex last_messages_mutex;
-		std::vector<header_info> last_messages;
+		std::vector<msg_info> last_messages;
 		uint last_messages_max = 100;	// max length, disabled by default
 		double last_messages_time = 30;	// seconds, disabled by default
 
-		void add_last_message(const header& hdr) {
-			header_info inf;
+		void add_last_message_info(const msg_id_type& msg_id) {
+			msg_info inf;
 			inf.arrival_time = this->get_local_clock_time();
-			inf.node_id = hdr.node_id;
-			inf.msg_id = hdr.msg_id;
+			inf.msg_id = msg_id;
 			last_messages.push_back(inf);
 
 			if (last_messages_max >= 0) {
@@ -293,70 +284,38 @@ namespace wsn::comm {
 			last_messages_time = v;
 		}
 
+		virtual msg_id_type get_message_id(const std::vector<uchar>& data) const = 0;
 
 		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
 			if (!wrapped_comm_type::receive(data, from)) return false;
 
-			auto& hdr = this->extract_header<header>(*data);
+			auto msg_id = get_message_id(*data);
 
-			// avoid receiving multiple times
-			{
-				std::lock_guard lock(last_messages_mutex);
-				if (std::find_if(last_messages.begin(), last_messages.end(), [&hdr](auto& e) {
-					return hdr.node_id == e.node_id && hdr.msg_id == e.msg_id;
-				}) != last_messages.end()) return false;
+			std::lock_guard lock(last_messages_mutex);
+			if (std::find_if(last_messages.begin(), last_messages.end(), [msg_id](auto& e) {
+				return msg_id == e.msg_id;
+			}) != last_messages.end()) return false;
 
-				add_last_message(hdr);
-			}
-
-			this->remove_header(*data, sizeof(hdr));
+			add_last_message_info(msg_id);
 			return true;
-		}
-
-
-		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
-			header hdr;
-			hdr.node_id = this->get_node()->get_id();
-			hdr.msg_id = msg_id++;
-
-			{
-				std::lock_guard lock(last_messages_mutex);
-				add_last_message(hdr);
-			}
-
-			auto newdata = data;
-			this->add_header(newdata, hdr);
-			wrapped_comm_type::send(newdata, to);
-		}
-
-
-		void route(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
-			header hdr;
-			hdr.node_id = this->get_node()->get_id();
-			hdr.msg_id = msg_id++;
-
-			{
-				std::lock_guard lock(last_messages_mutex);
-				add_last_message(hdr);
-			}
-
-			auto newdata = data;
-			this->add_header(newdata, hdr);
-			wrapped_comm_type::route(newdata, to);
 		}
 	};
 
 
 
-
 	template <typename wrapped_comm_type>
-	class fix_routing : public wrapped_comm_type {
+	class fix_routing : public loop_avoidance<std::pair<uint, uint>, wrapped_comm_type> {
 	protected:
+		using base_class = loop_avoidance<std::pair<uint, uint>, wrapped_comm_type>;
+
 		struct header {
 			uint dest_id;
+			uint msg_id;
+			uint source_id;
 		};
 
 		std::list<std::shared_ptr<basic_node>> neighbors;
+		uint message_id = 1;
 
 	public:
 		const std::list<std::shared_ptr<basic_node>>& get_neighbors() const {
@@ -388,7 +347,60 @@ namespace wsn::comm {
 			neighbors.clear();
 		}
 
+		std::pair<uint, uint> get_message_id(const std::vector<uchar>& data) const override {
+			header hdr;
+			this->extract_header(data, hdr);
+			return std::make_pair(hdr.source_id, hdr.msg_id);
+		}
 
+		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!base_class::receive(data, from)) return false;
+
+			header hdr;
+			this->extract_header(*data, hdr);
+
+			if (hdr.dest_id == this->get_node()->get_id()) return true;
+
+			if (neighbors.size() > 0) {
+				std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, data](auto p) {
+					base_class::send(*data, p);
+				});
+
+				this->fire(basic_comm::event_forward, data, from);
+			}
+			return true;
+		}
+
+		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
+			assert(false);
+		}
+
+		void route(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
+			if (to->is_same(this->get_node())) return;
+
+			header hdr;
+			hdr.dest_id = to->get_id();
+			hdr.source_id = this->get_id();
+			hdr.msg_id = message_id++;
+
+			auto newdata = data;
+			this->add_header(newdata, hdr);
+			std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, &newdata](auto p) {
+				base_class::send(newdata, p);
+			});
+		}
+	};
+
+
+
+	template <typename wrapped_comm_type>
+	class hierarchical_routing : public fix_routing<wrapped_comm_type> {
+	protected:
+		struct header {
+			uint dest_id;
+		};
+
+	public:
 		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
 			if (!wrapped_comm_type::receive(data, from)) return false;
 
@@ -399,16 +411,12 @@ namespace wsn::comm {
 
 			if (neighbors.size() > 0) {
 				std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, data](auto p) {
-					wrapped_comm_type::send(*data, p);
+					base_class::send(*data, p);
 				});
 
 				this->fire(basic_comm::event_forward, data, from);
 			}
 			return true;
-		}
-
-		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
-			assert(false);
 		}
 
 		void route(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
@@ -428,15 +436,20 @@ namespace wsn::comm {
 
 
 	template <typename wrapped_comm_type>
-	class broadcast_routing : public wrapped_comm_type {
+	class broadcast_routing : public loop_avoidance<std::pair<uint, uint>, wrapped_comm_type> {
 	protected:
+		using base_class = loop_avoidance<std::pair<uint, uint>, wrapped_comm_type>;
+
 		struct header {
 			uint dest_id;
+			uint source_id;
+			uint msg_id;
 			double transmission_time;
 			int hops_to_live;	// hops to live, -1 means unused
 			int time_to_live;	// time to live in seconds, -1 means unused
 		};
 
+		uint message_id = 1;
 		double broadcast_range = 1.;	// in meters
 		int hops_to_live = -1;
 		int time_to_live = -1;
@@ -466,9 +479,14 @@ namespace wsn::comm {
 			hops_to_live = htl;
 		}
 
+		std::pair<uint, uint> get_message_id(const std::vector<uchar>& data) const override {
+			header hdr;
+			this->extract_header(data, hdr);
+			return std::make_pair(hdr.source_id, hdr.msg_id);
+		}
 
 		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
-			if (!wrapped_comm_type::receive(data, from)) return false;
+			if (!base_class::receive(data, from)) return false;
 
 			auto& hdr = this->extract_header<header>(*data);
 
@@ -497,7 +515,7 @@ namespace wsn::comm {
 
 			this->fire(basic_comm::event_forward, this->make_shared_data(newdata), from);
 			this->broadcast_by_distance(newdata, broadcast_range, [this, &newdata](auto p) {
-				wrapped_comm_type::send(newdata, p);
+				base_class::send(newdata, p);
 			});
 			return false;
 		}
@@ -511,6 +529,8 @@ namespace wsn::comm {
 
 			header hdr;
 			hdr.dest_id = to->get_id();
+			hdr.source_id = this->get_id();
+			hdr.msg_id = message_id++;
 			hdr.transmission_time = this->get_world_clock_time();
 			hdr.time_to_live = time_to_live;
 			hdr.hops_to_live = hops_to_live;
@@ -518,7 +538,7 @@ namespace wsn::comm {
 			auto newdata = data;
 			this->add_header(newdata, hdr);
 			this->broadcast_by_distance(newdata, broadcast_range, [this, &newdata](auto p) {
-				wrapped_comm_type::send(newdata, p);
+				base_class::send(newdata, p);
 			});
 		}
 	};

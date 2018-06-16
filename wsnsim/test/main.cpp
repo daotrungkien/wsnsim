@@ -8,7 +8,7 @@ using namespace std;
 using namespace wsn;
 
 
-namespace test = test3;
+namespace test = test2;
 
 
 
