@@ -1,14 +1,9 @@
-#include "test_case.h"
-#include "test1.h"
-#include "test2.h"
 #include "test3.h"
 
 
 using namespace std;
 using namespace wsn;
 
-
-namespace test = test2;
 
 
 
@@ -32,7 +27,7 @@ bool parse_cmd(const string& line, string& cmd, vector<string>& args)
 
 int _tmain()
 {
-	test::custom_test_case::create_test_case();
+	custom_test_case::create_test_case();
 
 	auto& tc = test_case::instance;
 

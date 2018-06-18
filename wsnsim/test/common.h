@@ -124,3 +124,39 @@ public:
 	virtual void setup() = 0;
 };
 
+
+
+template <typename T>
+std::basic_string<T> format_binary_string(const T* buffer, int length)
+{
+	std::basic_ostringstream<T> ss;
+	ss << std::hex << std::setfill(T('0'));
+
+	T c;
+	for (int i = 0; i < length; i++) {
+		c = buffer[i];
+		if ((c >= 32 && c <= 126) || (c >= 128 && c <= 254)) ss << c;
+		else ss << '[' << std::setw(2) << ((unsigned int)(unsigned char)c) << ']';
+	}
+
+	return ss.str();
+}
+
+template <typename T>
+std::basic_string<T> format_binary_string(const std::basic_string<T>& buffer)
+{
+	return format_binary_string(buffer.data(), buffer.length());
+}
+
+template <typename T>
+std::basic_string<T> format_binary_string(const std::vector<T>& buffer)
+{
+	std::basic_string<T> s(buffer.begin(), buffer.end());
+	return format_binary_string(s);
+}
+
+std::string format_binary_string(const std::vector<unsigned char>& buffer)
+{
+	std::string s(buffer.begin(), buffer.end());
+	return format_binary_string(s);
+}

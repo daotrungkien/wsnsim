@@ -18,7 +18,23 @@ namespace wsn::comm {
 
 
 	template <typename wrapped_comm_type>
-	class with_delay : public wrapped_comm_type {
+	class with_delay_generic : public wrapped_comm_type {
+	public:
+		virtual std::chrono::duration<double> calc_delay(std::shared_ptr<basic_node> to) = 0;
+
+		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
+			this->fire(basic_comm::event_send, this->make_shared_data(data), to);
+
+			auto delay = calc_delay(to);
+			this->timer_once(delay, true, [newdata = this->make_shared_data(data), to, this](event&) {
+				to->get_comm()->receive(newdata, this->get_node());
+			});
+		}
+	};
+
+
+	template <typename wrapped_comm_type>
+	class with_delay_linear : public with_delay_generic<wrapped_comm_type> {
 	protected:
 		std::default_random_engine random_generator{ (uint)time(nullptr) };
 		std::uniform_real_distribution<double> random{ 0., 0. };
@@ -43,19 +59,14 @@ namespace wsn::comm {
 				std::chrono::duration_cast<std::chrono::duration<double>>(_random_max).count());
 		}
 
-		void send(const std::vector<uchar>& data, std::shared_ptr<basic_node> to) override {
-			this->fire(basic_comm::event_send, this->make_shared_data(data), to);
-
-			auto tto = std::dynamic_pointer_cast<comm::with_delay<wrapped_comm_type>>(to->get_comm());
+		std::chrono::duration<double> calc_delay(std::shared_ptr<basic_node> to) override {
+			auto tto = std::dynamic_pointer_cast<with_delay_linear<wrapped_comm_type>>(to->get_comm());
 			assert(tto);
 
 			double distance = this->get_node()->get_location().distance_to(to->get_location());
 
-			std::chrono::duration<double> delay = sender_base + tto->receiver_base + (multiplier * distance) +
+			return sender_base + tto->receiver_base + (multiplier * distance) +
 				std::chrono::duration<double>(random(random_generator));
-			this->timer_once(delay, true, [newdata = this->make_shared_data(data), to, this](event&) {
-				to->get_comm()->receive(newdata, this->get_node());
-			});
 		}
 	};
 

@@ -47,7 +47,7 @@ if ~isempty(cdata)
         t = cdata{1}(i);
         name = cdata{2}{i};
         idx = node_idx(name);
-        ndata{8}(idx) = t - tmin;
+        ndata{7}(idx) = t - tmin;
     end
 end
 
