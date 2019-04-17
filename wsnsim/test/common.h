@@ -26,14 +26,36 @@ public:
 	void init() {
 		if (logging) init_log_file();
 
-		add_command("start", [this]() { world->start(); });
-		add_command("stop", [this] { world->stop(); });
-		add_command("clear-log", [this] { init_log_file(); });
+		add_command("info", [this]() {
+			std::cout << "Test case: " << get_test_name() << std::endl
+				<< std::endl
+				<< "Commands:" << std::endl;
+
+			for (auto& cmd : commands) {
+				std::cout << "- " << cmd.cmd << std::endl;
+			}
+		});
+
+		add_command("start", [this]() {
+			world->start();
+		});
+
+		add_command("stop", [this] {
+			world->stop();
+		});
+
+		add_command("clear-log", [this] {
+			init_log_file();
+		});
+
 		add_command("new-trial", [this] {
 			trial++;
 			init_log_file();
 		});
-		add_command("node-info", [this] (auto& cmd, auto& args) { node_info(world, args); });
+
+		add_command("node-info", [this] (auto& cmd, auto& args) {
+			node_info(world, args);
+		});
 	}
 
 	void init_log_file() {
@@ -107,9 +129,7 @@ public:
 	}
 
 
-	virtual std::string get_test_name() const {
-		return "test";
-	}
+	virtual std::string get_test_name() const = 0;
 
 	virtual void print_node_info(std::shared_ptr<wsn::basic_node> node, std::ostream& stream) {
 		auto loc = node->get_location();

@@ -8,13 +8,13 @@ using namespace wsn;
 
 
 
-inline mutex writemx;
+mutex writemx;
 
-inline shared_ptr<basic_node> master_node;
-inline double measure_time;
+shared_ptr<basic_node> master_node;
+double measure_time;
 
 
-inline void log_info(shared_ptr<basic_node> node, shared_ptr<basic_node> from, double t, const char* action) {
+void log_info(shared_ptr<basic_node> node, shared_ptr<basic_node> from, double t, const char* action) {
 	if (!test_case::instance->logging) return;
 	test_case::instance->logger << (t - measure_time) << "\t"
 		<< node->get_name() << "\t"
@@ -86,7 +86,7 @@ public:
 
 class custom_comm : public
 	comm::packaged<
-	comm::fix_routing<
+	comm::fixed_routing<
 	comm::with_loss<
 	comm::with_delay_linear<basic_comm>>>> {
 public:
@@ -174,19 +174,25 @@ public:
 
 		function<void(shared_ptr<basic_node>)> set_neighbors;
 		set_neighbors = [&set_neighbors, &wsn](shared_ptr<basic_node> n) {
-			auto nblist = wsn->find_nodes_in_range(n->get_location(), 5);
+			auto range_list = wsn->find_nodes_in_range(n->get_location(), 5);
 			int i = 0;
-			for (auto nb : nblist) {
+
+			decltype(range_list) nblist;
+			for (auto nb : range_list) {
 				if (nb->is_same(n)) continue;
 				if (nb->is_same(master_node)) continue;
 
 				auto comm = dynamic_pointer_cast<temp_node>(nb)->get_comm_t();
-				if (comm->get_neighbors().size() >= 3) continue;
+				if (comm->get_neighbors().size() >= 1) continue;
 				if (comm->has_neighbor(n)) continue;
 
 				comm->add_neighbor(n);
-				set_neighbors(nb);
+				nblist.push_back(nb);
 				if (++i == 3) break;
+			}
+
+			for (auto nb : nblist) {
+				set_neighbors(nb);
 			}
 		};
 

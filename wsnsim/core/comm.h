@@ -2,6 +2,7 @@
 
 #include "wsnsim.h"
 #include <limits>
+#include <variant>
 
 
 namespace wsn::comm {
@@ -315,18 +316,13 @@ namespace wsn::comm {
 
 
 	template <typename wrapped_comm_type>
-	class fix_routing : public loop_avoidance<std::pair<uint, uint>, wrapped_comm_type> {
+	class hierarchical_routing : public wrapped_comm_type {
 	protected:
-		using base_class = loop_avoidance<std::pair<uint, uint>, wrapped_comm_type>;
-
 		struct header {
 			uint dest_id;
-			uint msg_id;
-			uint source_id;
 		};
 
 		std::list<std::shared_ptr<basic_node>> neighbors;
-		uint message_id = 1;
 
 	public:
 		const std::list<std::shared_ptr<basic_node>>& get_neighbors() const {
@@ -342,7 +338,7 @@ namespace wsn::comm {
 		}
 
 		void add_neighbors(std::initializer_list<std::shared_ptr<basic_node>> p) {
-			neighbors.insert(parents.end(), p);
+			neighbors.insert(neighbors.end(), p);
 		}
 
 		void remove_neighbor(std::shared_ptr<basic_node> p) {
@@ -358,14 +354,8 @@ namespace wsn::comm {
 			neighbors.clear();
 		}
 
-		std::pair<uint, uint> get_message_id(const std::vector<uchar>& data) const override {
-			header hdr;
-			this->extract_header(data, hdr);
-			return std::make_pair(hdr.source_id, hdr.msg_id);
-		}
-
 		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
-			if (!base_class::receive(data, from)) return false;
+			if (!wrapped_comm_type::receive(data, from)) return false;
 
 			header hdr;
 			this->extract_header(*data, hdr);
@@ -374,7 +364,7 @@ namespace wsn::comm {
 
 			if (neighbors.size() > 0) {
 				std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, data](auto p) {
-					base_class::send(*data, p);
+					wrapped_comm_type::send(*data, p);
 				});
 
 				this->fire(basic_comm::event_forward, data, from);
@@ -391,37 +381,48 @@ namespace wsn::comm {
 
 			header hdr;
 			hdr.dest_id = to->get_id();
-			hdr.source_id = this->get_id();
-			hdr.msg_id = message_id++;
 
 			auto newdata = data;
 			this->add_header(newdata, hdr);
 			std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, &newdata](auto p) {
-				base_class::send(newdata, p);
+				wrapped_comm_type::send(newdata, p);
 			});
 		}
 	};
 
 
-
+	
+	// similar to hierarchical_routing but with loop_avoidance
 	template <typename wrapped_comm_type>
-	class hierarchical_routing : public fix_routing<wrapped_comm_type> {
+	class fixed_routing : public hierarchical_routing<loop_avoidance<std::pair<uint, uint>, wrapped_comm_type>> {
 	protected:
+		using base_class = loop_avoidance<std::pair<uint, uint>, wrapped_comm_type>;
+
 		struct header {
 			uint dest_id;
+			uint msg_id;
+			uint source_id;
 		};
 
+		uint message_id = 1;
+
 	public:
+		std::pair<uint, uint> get_message_id(const std::vector<uchar>& data) const override {
+			header hdr;
+			this->extract_header(data, hdr);
+			return std::make_pair(hdr.source_id, hdr.msg_id);
+		}
+
 		bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
-			if (!wrapped_comm_type::receive(data, from)) return false;
+			if (!base_class::receive(data, from)) return false;
 
 			header hdr;
 			this->extract_header(*data, hdr);
 
 			if (hdr.dest_id == this->get_node()->get_id()) return true;
 
-			if (neighbors.size() > 0) {
-				std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, data](auto p) {
+			if (this->neighbors.size() > 0) {
+				std::for_each(std::execution::par, this->neighbors.begin(), this->neighbors.end(), [this, data](auto p) {
 					base_class::send(*data, p);
 				});
 
@@ -435,14 +436,17 @@ namespace wsn::comm {
 
 			header hdr;
 			hdr.dest_id = to->get_id();
+			hdr.source_id = this->get_id();
+			hdr.msg_id = message_id++;
 
 			auto newdata = data;
 			this->add_header(newdata, hdr);
-			std::for_each(std::execution::par, neighbors.begin(), neighbors.end(), [this, &newdata](auto p) {
-				wrapped_comm_type::send(newdata, p);
+			std::for_each(std::execution::par, this->neighbors.begin(), this->neighbors.end(), [this, &newdata](auto p) {
+				base_class::send(newdata, p);
 			});
 		}
 	};
+
 
 
 
@@ -557,4 +561,101 @@ namespace wsn::comm {
 
 
 
+	template <typename wrapped_comm_type>
+	class spanning_tree_routing : public wrapped_comm_type {
+	protected:
+		enum class message_type : uchar {
+			notify_root,
+			update_child,
+			send_data
+		};
+
+		struct notify_root_data_type {
+			double cost;
+			uint root_id;
+		};
+
+		struct update_child_data_type {
+			uint child_id;
+		};
+
+		struct header {
+			message_type msg_type;
+			double send_time;
+			std::variant<notify_root_data_type, update_child_data_type> data;
+		};
+
+		bool i_am_root = true;
+		uint root_id = -1;
+		double cost_to_root = 0.;
+		std::shared_ptr<basic_node> parent;
+		std::list<uint> children;
+
+		header& prepare_message(message_type type, std::vector<uchar>& data) {
+			header hdr;
+			hdr.msg_type = type;
+			hdr.send_time = this->get_global_clock_time();
+			this->add_header(data, hdr);
+
+			return this->extract_header<header>(data);
+		}
+
+	public:
+		virtual void start() override {
+			wrapped_comm_type::start();
+
+			i_am_root = true;
+			root_id = this->get_node()->get_id();
+			cost_to_root = 0.;
+			parent = nullptr;
+			children.clear();
+
+			std::vector<uchar> data;
+			auto& hdr = prepare_message(message_type::notify_root, data);
+			auto& hdr_data = std::get<notify_root_data_type>(hdr.data);
+			hdr_data.root_id = root_id;
+			hdr_data.cost = 0.;
+			this->broadcast_by_distance(data, 5);
+		}
+
+		virtual bool receive(std::shared_ptr<std::vector<uchar>> data, std::shared_ptr<basic_node> from) override {
+			if (!wrapped_comm_type::receive(data, from)) return false;
+
+			auto& hdr = this->extract_header<header>(*data);
+			if (hdr.msg_type == message_type::notify_root) {
+				if (hdr.data.notify_root.root_id < root_id) {
+					i_am_root = false;
+					root_id = hdr.data.notify_root.root_id;
+					cost_to_root = hdr.cost + this->get_global_clock_time() - hdr.send_time;
+					parent = from;
+
+					std::vector<uchar> data2;
+					auto& hdr2 = prepare_message(message_type::update_child, data2);
+					auto& hdr2_data = std::get<update_child_data_type>(hdr2.data);
+					hdr2_data.child_id = this->get_node()->get_id();
+					wrapped_comm_type::send(data2, parent);
+
+					std::vector<uchar> data;
+					auto& hdr = prepare_message(message_type::notify_root, data);
+					auto& hdr_data = std::get<notify_root_data_type>(hdr.data);
+					hdr_data.root_id = root_id;
+					hdr_data.cost = 0.;
+					this->broadcast_by_distance(data, 5);
+				}
+				else {
+					std::vector<uchar> data2;
+					auto& hdr2 = prepare_message(message_type::notify_root, data2);
+					auto& hdr2_data = std::get<notify_root_data_type>(hdr2.data);
+					hdr2_data.root_id = root_id;
+					hdr2_data.cost = cost_to_root;
+					wrapped_comm_type::send(data2, parent);
+				}
+
+			}
+			else if (hdr.msg_type == message_type::update_child) {
+
+			}
+
+		}
+	};
 }

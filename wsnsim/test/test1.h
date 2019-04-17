@@ -9,9 +9,9 @@ using namespace wsn;
 
 
 
-inline mutex writemx;
+mutex writemx;
 
-inline void log_info(shared_ptr<basic_node> node)
+void log_info(shared_ptr<basic_node> node)
 {
 	if (!test_case::instance->logging) return;
 	test_case::instance->logger << node->get_world_clock_time() << "\t"
@@ -82,7 +82,7 @@ inline void controller_measure_then_sleep::init()
 class custom_test_case : public test_case {
 public:
 	string get_test_name() const override {
-		return "test1";
+		return "Battery & solar panels";
 	}
 
 	void setup() override {

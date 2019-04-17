@@ -384,10 +384,16 @@ namespace wsn {
 			const std::type_info* signature;
 		};
 
+		enum class status_type : uchar {
+			running,
+			paused,
+			stopped
+		};
+
 		struct timer_info {
 			uint key;
 			bool sync_start_stop;
-			enum { running, paused, stopped } status;
+			status_type status;
 			std::mutex mutex;
 			std::condition_variable cond;
 		};
@@ -463,44 +469,44 @@ namespace wsn {
 			}
 
 			if (sync_start_stop) {
-				inf->status = started ? timer_info::running : timer_info::paused;
+				inf->status = started ? status_type::running : status_type::paused;
 
 				on_self(event_start, [inf](event&) {
-					inf->status = timer_info::running;
+					inf->status = status_type::running;
 					inf->cond.notify_one();
 				});
 
 				on_self(event_stop, [inf](event&) {
-					inf->status = timer_info::paused;
+					inf->status = status_type::paused;
 					inf->cond.notify_one();
 				});
 			}
 			else {
-				inf->status = timer_info::running;
+				inf->status = status_type::running;
 			}
 
 			std::thread([inf, dur, sync_start_stop, callback, this]() {
 				do {
-					if (inf->status == timer_info::paused) {
+					if (inf->status == status_type::paused) {
 						std::unique_lock lock(inf->mutex);
-						inf->cond.wait(lock, [inf]() { return inf->status != timer_info::paused; });
+						inf->cond.wait(lock, [inf]() { return inf->status != status_type::paused; });
 					}
 
-					while (inf->status == timer_info::running) {
+					while (inf->status == status_type::running) {
 						auto rdur = dur / (get_world()->get_clock().get_scale());
 
 						std::unique_lock lock(inf->mutex);
-						if (inf->cond.wait_for(lock, rdur, [inf]() { return inf->status != timer_info::running; })) break;
+						if (inf->cond.wait_for(lock, rdur, [inf]() { return inf->status != status_type::running; })) break;
 
 						event ev;
 						ev.event_id = event_timer;
 						ev.target = std::dynamic_pointer_cast<entity>(shared_from_this());
 						if (!callback(ev)) {
-							inf->status = timer_info::stopped;
+							inf->status = status_type::stopped;
 							break;
 						}
 					}
-				} while (inf->status != timer_info::stopped);
+				} while (inf->status != status_type::stopped);
 
 				{
 					std::lock_guard lock(timer_list_mutex);
@@ -541,7 +547,7 @@ namespace wsn {
 
 			auto inf = *itr;
 			std::unique_lock lock(inf->mutex);
-			inf->status = timer_info::stopped;
+			inf->status = status_type::stopped;
 			inf->cond.notify_one();
 		}
 
@@ -967,7 +973,7 @@ namespace wsn {
 
 		template <class node_type, class... Targs>
 		std::shared_ptr<node_type> new_node(Targs... args) {
-			std::shared_ptr<node_type> node(make_shared<node_type>(std::forward<Targs>(args)...));
+			std::shared_ptr<node_type> node(std::make_shared<node_type>(std::forward<Targs>(args)...));
 			node->network = std::dynamic_pointer_cast<basic_network>(shared_from_this());
 			node->id = unique_id();
 
@@ -1188,7 +1194,7 @@ namespace wsn {
 		std::map<uint, std::shared_ptr<basic_ambient>> ambients;
 
 		generic_world()
-			: network(make_shared<network_type>())
+			: network(std::make_shared<network_type>())
 		{}
 
 	public:

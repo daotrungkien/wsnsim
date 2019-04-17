@@ -50,6 +50,12 @@
     <ClInclude Include="..\core\wsnsim.h">
       <Filter>Header Files\core</Filter>
     </ClInclude>
+    <ClInclude Include="..\core\noise.h">
+      <Filter>Header Files\core</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="test1.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -59,11 +65,11 @@
     <ClInclude Include="test3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\core\noise.h">
-      <Filter>Header Files\core</Filter>
-    </ClInclude>
-    <ClInclude Include="common.h">
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
+    <None Include="test4.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
+    </None>
   </ItemGroup>
 </Project>

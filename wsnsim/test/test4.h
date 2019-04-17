@@ -86,9 +86,10 @@ public:
 
 class custom_comm : public
 	comm::packaged<
+	comm::spanning_tree_routing<
 	comm::broadcast_routing<
 	comm::with_loss<
-	comm::with_delay_linear<basic_comm>>>> {
+	comm::with_delay_linear<basic_comm>>>>> {
 public:
 	void init() override {
 		on_self(event_first_start, [this](event& ev) {
