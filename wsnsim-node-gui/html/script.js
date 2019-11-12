@@ -283,10 +283,16 @@ function replayLogFile() {
 	}, 100);
 }
 
-function setupButtons(toolbar, onClearFunc) {
+function setupButtons(toolbar, onClearCanvasFunc) {
 	$(toolbar).html(`
 		<div class="btn-group mr-1">
 			<button class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
+
+			<button class="btn btn-sm btn-danger dropdown-toggle" data-toggle="dropdown"></button>
+			<div class="dropdown-menu">
+				<button class="dropdown-item" id="btn-clear-log">Clear log</button>
+			</div>
+
 			<button class="btn btn-sm btn-secondary" id="btn-load-file">Load file...</button>
 		</div>
 
@@ -305,8 +311,12 @@ function setupButtons(toolbar, onClearFunc) {
 	$('#btn-export').click(() => exportSvg($(".canvas"), $("#btn-download")));
 
 	$('#btn-clear').click(() => {
+		if (onClearCanvasFunc) onClearCanvasFunc();
+	});
+
+	$('#btn-clear-log').click(() => {
 		logContent = [];
-		if (onClearFunc) onClearFunc();
+		if (onClearCanvasFunc) onClearCanvasFunc();
 	});
 
 	$('#btn-load-file').click(loadLogFile);
@@ -316,6 +326,8 @@ function setupButtons(toolbar, onClearFunc) {
 			stopReplayLogFile();
 
 		} else {	// start
+			if (onClearCanvasFunc) onClearCanvasFunc();
+
 			$('#btn-replay').text('Stop');
 			$('#btn-replay-pause').attr('disabled', null);
 			replayLogFile();
