@@ -16,6 +16,9 @@
     <Filter Include="Header Files\core">
       <UniqueIdentifier>{172e63e6-ef35-43bc-8276-5cdb74e6f0c3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\lib">
+      <UniqueIdentifier>{407131d8-dd64-4917-afcb-05152d6e8136}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -25,6 +28,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\lib\spa\spa.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -71,5 +77,10 @@
     <None Include="test4.h">
       <Filter>Header Files</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\lib\libzmq-v141-mt-4_3_2.lib">
+      <Filter>Source Files\lib</Filter>
+    </Library>
   </ItemGroup>
 </Project>

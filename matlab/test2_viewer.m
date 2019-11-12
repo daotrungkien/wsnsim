@@ -1,14 +1,15 @@
 trial = 1;
+path = '..\\Debug\\';
 
 
-file = fopen('..\\Debug\\wsnsim-log-test2-nodes.txt');
+file = fopen([path 'wsnsim-log-test2-nodes.txt']);
 if file == -1
     error('Node information file not found!');
 end
 ndata = textscan(file, '%f %s %f %f %f %s');
 fclose(file);
 
-file = fopen(sprintf('..\\Debug\\wsnsim-log-test2-trial-%d.txt', trial));
+file = fopen(sprintf([path 'wsnsim-log-test2-trial-%d.txt'], trial));
 if file == -1
     cdata = [];
 else
@@ -20,18 +21,21 @@ end
 fig = figure;
 hold on
 box on
-xlim([-5 35])
-ylim([-5 35])
+xlim([-1 31])
+ylim([-1 31])
 daspect([1 1 1])
+xlabel('X (m)');
+ylabel('Y (m)');
 
 
 node_idx = @(name)  find(strcmp(ndata{2}, name));
-circle = @(x, y, r, color)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'EdgeColor', color);
+scircle = @(x, y, r)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1]);
+dcircle = @(x, y, r)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'LineStyle', '-.');
 fcircle = @(x, y, r, color) rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'FaceColor', color);
 
 node_size = .4;
 node_ring = .6;
-master_node = 'temp1';
+master_node = '1';
 
 ndata{7}(1:length(ndata{1})) = -1;
 
@@ -71,9 +75,9 @@ for i = 1 : length(cdata{1})
     
     switch action
         case 'measure'
-            circle(x, y, node_ring, 'blue');
+            scircle(x, y, node_ring);
         case 'drop'
-            circle(x, y, node_ring, 'red');
+            dcircle(x, y, node_ring);
     end
 end
 
@@ -85,14 +89,15 @@ for i = 1 : length(ndata{1})
     t = ndata{7}(i);
     
     if strcmp(name, master_node)
-        circle(x, y, node_ring, 'green');
+        scircle(x, y, node_ring);
     end
     
     if t < 0
-        fcircle(x, y, node_size, 'red')
+        fcircle(x, y, node_size, 'white')
     else
-        fcircle(x, y, node_size, [0 0 t/(tmax-tmin)])
+        ct = t/(tmax-tmin);
+        fcircle(x, y, node_size, [ct ct ct])
     end
     
-    text(x, y-1.5, name, 'HorizontalAlignment', 'center', 'Color', [.5 .5 .5])
+    text(x, y+1, name, 'HorizontalAlignment', 'center', 'Color', [.5 .5 .5])
 end

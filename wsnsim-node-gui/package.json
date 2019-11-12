@@ -1,0 +1,19 @@
+{
+	"name": "wsnsim-node-gui",
+	"version": "1.0.0",
+	"description": "",
+	"scripts": {
+		"test1": "electron app/test1.js",
+		"test2": "electron app/test2.js"
+	},
+	"author": "Dao Trung Kien",
+	"license": "ISC",
+	"dependencies": {
+		"bootstrap": "^4.3.1",
+		"d3": "^5.12.0",
+		"electron-rebuild": "^1.8.6",
+		"jquery": "^3.4.1",
+		"popper.js": "^1.16.0",
+		"zeromq": "^5.1.1"
+	}
+}

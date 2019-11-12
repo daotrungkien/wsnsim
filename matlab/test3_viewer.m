@@ -1,14 +1,15 @@
 trial = 1;
+path = '..\\Debug\\result1\\';
 
 
-file = fopen('..\\Debug\\wsnsim-log-test3-nodes.txt');
+file = fopen([path 'wsnsim-log-test3-nodes.txt']);
 if file == -1
     error('Node information file not found!');
 end
 ndata = textscan(file, '%f %s %f %f %f %s %s');
 fclose(file);
 
-file = fopen(sprintf('..\\Debug\\wsnsim-log-test3-trial-%d.txt', trial));
+file = fopen(sprintf([path 'wsnsim-log-test3-trial-%d.txt'], trial));
 if file == -1
     cdata = [];
 else
@@ -20,13 +21,16 @@ end
 fig = figure;
 hold on
 box on
-xlim([-5 35])
-ylim([-5 35])
+xlim([-1 31])
+ylim([-1 31])
 daspect([1 1 1])
+xlabel('X (m)');
+ylabel('Y (m)');
 
 
 node_idx = @(name)  find(strcmp(ndata{2}, name));
-circle = @(x, y, r, color)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'EdgeColor', color);
+scircle = @(x, y, r)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1]);
+dcircle = @(x, y, r)  rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'LineStyle', '-.');
 fcircle = @(x, y, r, color) rectangle('Position', [x-r,y-r,2*r,2*r], 'Curvature', [1,1], 'FaceColor', color);
 
 node_size = .4;
@@ -60,7 +64,7 @@ for i = 1 : length(ndata{1})
     t = ndata{8}(i);
     
     if strcmp(name, master_node)
-        circle(x, y, node_ring, 'green');
+        scircle(x, y, node_ring);
     end
     
     if ~strcmp(parents, '-')
@@ -69,18 +73,19 @@ for i = 1 : length(ndata{1})
             pidx = node_idx(a{j});
             px = ndata{3}(pidx);
             py = ndata{4}(pidx);
-            quiver(x, y, px-x, py-y, 'Color', [.7 .7 .7], 'LineWidth', 3);
+            quiver(x, y, px-x, py-y, 'Color', [.8 .8 .8], 'LineWidth', 3);
         end
     end
     
     fcircle(x, y, node_size, 'black');
     if t < 0
-        fcircle(x, y, node_size, 'red')
+        fcircle(x, y, node_size, 'white')
     else
-        fcircle(x, y, node_size, [0 0 t/(tmax-tmin)])
+        ct = t/(tmax-tmin);
+        fcircle(x, y, node_size, [ct ct ct])
     end
     
-    text(x, y-1.5, name, 'HorizontalAlignment', 'center', 'Color', [.5 .5 .5])
+    text(x, y+1, name, 'HorizontalAlignment', 'center', 'Color', [.5 .5 .5])
 end
 
 
@@ -99,14 +104,14 @@ if ~isempty(cdata)
             from_idx = node_idx(from);
             fx = ndata{3}(from_idx);
             fy = ndata{4}(from_idx);
-            plot([x fx], [y fy], 'Color', [.4 .4 .4]);
+            plot([x fx], [y fy], 'Color', [.1 .1 .1], 'LineWidth', 2);
         end
 
         switch action
             case 'measure'
-                circle(x, y, node_ring, 'blue');
+                scircle(x, y, node_ring);
             case 'drop'
-                circle(x, y, node_ring, 'red');
+                dcircle(x, y, node_ring);
         end
     end
 end

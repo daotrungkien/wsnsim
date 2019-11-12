@@ -11,7 +11,7 @@ namespace wsn {
 		return location(d*l.x, d*l.y, d*l.z);
 	}
 
-	kutils::tstring format_time(double t, int prec)
+	std::string format_time(double t, int prec)
 	{
 		int h, m, s, f;
 		h = (int)(t / 3600);
@@ -21,8 +21,8 @@ namespace wsn {
 		s = (int)t;
 		f = (int)((t - s)*std::pow(10, prec));
 
-		kutils::tstring fmtstr = kutils::formatstr<TCHAR>(_T("%%02d:%%02d:%%02d.%%0%dd"), prec);
-		return kutils::formatstr<TCHAR>(fmtstr.c_str(), h, m, s, f);
+		std::string fmtstr = kutils::formatstr<char>("%%02d:%%02d:%%02d.%%0%dd", prec);
+		return kutils::formatstr<char>(fmtstr.c_str(), h, m, s, f);
 	}
 
 	std::string format_time(std::chrono::system_clock::time_point t, const char* format, int prec)

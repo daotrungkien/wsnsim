@@ -2,7 +2,47 @@
 
 
 #include <iostream>
+#include "../lib/zmq.hpp"
 #include "../core/wsnsim.h"
+
+struct config {
+	inline static const char* remote_logger_connection = "tcp://localhost:2000";
+};
+
+
+class logging {
+protected:
+	const bool to_console = true;
+	const bool to_file = true;
+	const bool to_zmq = true;
+
+	std::ofstream file;
+
+	zmq::context_t ctx;
+	zmq::socket_t sock;
+
+	void init_log_file();
+	void init_zmq();
+
+public:
+	logging()
+		: sock(ctx, zmq::socket_type::pub)
+	{
+	}
+
+	void init() {
+		init_log_file();
+		init_zmq();
+	}
+
+	void reset() {
+		init_log_file();
+	}
+
+	void log(std::string msg);
+};
+
+extern logging logger;
 
 
 class test_case {
@@ -15,8 +55,6 @@ public:
 	std::shared_ptr<wsn::generic_world<wsn::basic_network>> world;
 
 	int trial = 1;
-	bool logging = true;
-	std::ofstream logger;
 
 	std::list<command_item> commands;
 
@@ -24,11 +62,16 @@ public:
 
 
 	void init() {
-		if (logging) init_log_file();
+		logger.init();
 
 		add_command("info", [this]() {
+			auto& clock = world->get_clock();
+			double time = clock.clock_now();
+
 			std::cout << "Test case: " << get_test_name() << std::endl
-				<< std::endl
+				<< "Simulation global clock time: " << wsn::format_time(time) << std::endl
+				<< "Simulation reference time: " << wsn::format_time(clock.clock2reference(time)) << std::endl
+				<< "System time: " << wsn::format_time(clock.clock2system(time)) << std::endl
 				<< "Commands:" << std::endl;
 
 			for (auto& cmd : commands) {
@@ -45,27 +88,17 @@ public:
 		});
 
 		add_command("clear-log", [this] {
-			init_log_file();
+			logger.reset();
 		});
 
 		add_command("new-trial", [this] {
 			trial++;
-			init_log_file();
+			logger.reset();
 		});
 
 		add_command("node-info", [this] (auto& cmd, auto& args) {
 			node_info(world, args);
 		});
-	}
-
-	void init_log_file() {
-		if (!logging) return;
-
-		if (logger.is_open()) logger.close();
-
-		logger.open(kutils::formatstr("wsnsim-log-%s-trial-%d.txt", get_test_name().c_str(), trial), std::ios::out);
-		if (!logger) std::cout << "Log file creation failed" << std::endl;
-		else logging = true;
 	}
 
 	void add_command(const std::string& cmd, std::function<void(const std::string&, const std::vector<std::string>&)> action) {
@@ -130,6 +163,7 @@ public:
 
 
 	virtual std::string get_test_name() const = 0;
+	virtual std::string get_test_description() const = 0;
 
 	virtual void print_node_info(std::shared_ptr<wsn::basic_node> node, std::ostream& stream) {
 		auto loc = node->get_location();
@@ -175,7 +209,7 @@ std::basic_string<T> format_binary_string(const std::vector<T>& buffer)
 	return format_binary_string(s);
 }
 
-std::string format_binary_string(const std::vector<unsigned char>& buffer)
+inline std::string format_binary_string(const std::vector<unsigned char>& buffer)
 {
 	std::string s(buffer.begin(), buffer.end());
 	return format_binary_string(s);

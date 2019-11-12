@@ -49,7 +49,7 @@ namespace wsn {
 	class basic_world;
 
 
-	kutils::tstring format_time(double t, int prec = 3);
+	std::string format_time(double t, int prec = 3);
 	std::string format_time(std::chrono::system_clock::time_point t = std::chrono::system_clock::now(), const char* format = "%Y-%m-%d %H:%M:%S", int prec = 3);
 
 
@@ -58,6 +58,14 @@ namespace wsn {
 		static type id = 1;
 		return id++;
 	}
+
+
+	template <typename type>
+	class with_super : public type {
+	protected:
+		typedef type super;
+	};
+
 
 	class wsn_type : public std::enable_shared_from_this<wsn_type> {
 	public:
@@ -156,7 +164,7 @@ namespace wsn {
 		}
 
 		json to_json() const override {
-			return json({ { "x", x },{ "y", y },{ "z", z } });
+			return json({ { "x", x }, { "y", y }, { "z", z } });
 		}
 
 		void from_json(const json& j) override {
@@ -250,6 +258,10 @@ namespace wsn {
 			sys_start_time = std::chrono::system_clock::now();
 			if (ref_same_as_sys) ref_start_time = sys_start_time;
 			started = true;
+		}
+
+		bool is_started() const {
+			return started;
 		}
 
 		void stop() {
@@ -485,39 +497,44 @@ namespace wsn {
 				inf->status = status_type::running;
 			}
 
-			std::thread([inf, dur, sync_start_stop, callback, this]() {
-				do {
-					if (inf->status == status_type::paused) {
-						std::unique_lock lock(inf->mutex);
-						inf->cond.wait(lock, [inf]() { return inf->status != status_type::paused; });
-					}
-
-					while (inf->status == status_type::running) {
-						auto rdur = dur / (get_world()->get_clock().get_scale());
-
-						std::unique_lock lock(inf->mutex);
-						if (inf->cond.wait_for(lock, rdur, [inf]() { return inf->status != status_type::running; })) break;
-
-						event ev;
-						ev.event_id = event_timer;
-						ev.target = std::dynamic_pointer_cast<entity>(shared_from_this());
-						if (!callback(ev)) {
-							inf->status = status_type::stopped;
-							break;
+			try {
+				std::thread([inf, dur, sync_start_stop, callback, this]() {
+					do {
+						if (inf->status == status_type::paused) {
+							std::unique_lock lock(inf->mutex);
+							inf->cond.wait(lock, [inf]() { return inf->status != status_type::paused; });
 						}
+
+						while (inf->status == status_type::running) {
+							auto rdur = dur / (get_world()->get_clock().get_scale());
+
+							std::unique_lock lock(inf->mutex);
+							if (inf->cond.wait_for(lock, rdur, [inf]() { return inf->status != status_type::running; })) break;
+
+							event ev;
+							ev.event_id = event_timer;
+							ev.target = std::dynamic_pointer_cast<entity>(shared_from_this());
+							if (!callback(ev)) {
+								inf->status = status_type::stopped;
+								break;
+							}
+						}
+					} while (inf->status != status_type::stopped);
+
+					{
+						std::lock_guard lock(timer_list_mutex);
+
+						auto itr = std::find_if(timer_list.begin(), timer_list.end(), [inf](auto inf2) {
+							return inf2->key == inf->key;
+						});
+
+						if (itr != timer_list.end()) timer_list.erase(itr);
 					}
-				} while (inf->status != status_type::stopped);
-
-				{
-					std::lock_guard lock(timer_list_mutex);
-
-					auto itr = std::find_if(timer_list.begin(), timer_list.end(), [inf](auto inf2) {
-						return inf2->key == inf->key;
-					});
-
-					if (itr != timer_list.end()) timer_list.erase(itr);
-				}
-			}).detach();
+				}).detach();
+			}
+			catch (...) {
+				std::cout << "-------------------" << std::endl;
+			}
 
 			return inf->key;
 		}

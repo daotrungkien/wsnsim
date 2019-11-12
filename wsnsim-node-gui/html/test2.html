@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>wsnsim: Test 2</title>
+
+	<link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css" />
+
+	<script src="script.js"></script>
+	<style>
+		.canvas-container {
+			margin: 10px auto;
+			border: 1px solid #ccc;
+			width: 100%;
+		}
+
+		.canvas {
+			display: block;
+			width: 100%;
+		}
+
+		.axes {
+			stroke: #000;
+			stroke-width: 0.1px;
+		}
+		.axes text {
+			font-size: .5px;
+			font-family: sans-serif;
+			font-weight: lighter;
+		}
+
+		.node {
+			r: .2;
+			fill: #ccc;
+		}
+
+		.node.node-reached {
+			fill: #000;
+		}
+
+		.node.node-dropped {
+			stroke: yellow;
+			stroke-width: 0.2px;
+		}
+
+		.node.node-source {
+			r: .4;
+			fill: red;
+		}
+
+		.node.node-master {
+			r: .4;
+			fill: blue;
+		}
+
+		.message {
+			stroke: #ccc;
+			stroke-width: 0.1px;
+			marker-end: url(#arrow-head);
+		}
+
+		#arrow-head {
+			fill: #ccc;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container my-4">
+		<h1>wsnsim: Test 2</h1>
+
+		<div>
+			<div class="canvas-container">
+				<svg viewBox="-1 -1 32 32" class="canvas" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
+					<defs>
+						<marker id="arrow-head" viewBox="0 -3 10 6" refX="10" refY="0" markerWidth="6" markerHeight="6"
+							orient="auto">
+							<path d="M 0,-3 L 10,0 L 0,3"></path>
+						</marker>
+					</defs>
+
+					<g class="figure">
+						<g class="axes"></g>
+						<g class="messages"></g>
+						<g class="nodes"></g>
+					</g>
+				</svg>
+			</div>
+
+			<div class="btn-toolbar">
+			</div>
+		</div>
+	</div>
+
+	<script>
+		let nodes = [];
+
+		function findNodeById(id) {
+			return nodes.find(e => e.id == id);
+		}
+
+		function findNodeByName(name) {
+			return nodes.find(e => e.name == name);
+		}
+
+		function selectNode(id) {
+			return d3.select(`.node[id=node-${id}]`);
+		}
+
+		function updateNodeAttr(node) {
+			node.attr('id', d => `node-${d.id}`)
+				.attr('title', d => d.name)
+				.classed('node-reached', d => d.reached)
+				.classed('node-dropped', d => d.dropped)
+				.classed('node-master', d => d.master)
+				.classed('node-source', d => d.source)
+				.attr('cx', d => xTransf(d.x))
+				.attr('cy', d => yTransf(d.y));
+		}
+
+		function updateNodes() {
+			let n = d3.select('.nodes')
+				.selectAll('.node')
+				.data(nodes)
+				.call(updateNodeAttr);
+			n.enter().append('circle')
+				.classed('node', true)
+				.attr('data-toggle', 'tooltip')
+				.call(updateNodeAttr);
+			n.exit().remove();
+		}
+
+		initCanvas('.canvas', 0, 0, 30, 30, 1);
+		haxis(0, 0, 30, linearScale(0, 30, 2));
+		vaxis(0, 0, 30, linearScale(0, 30, 2));
+
+
+		setLogProcessor(msg => {
+			console.log(msg)
+			const cols = msg.split('\t');
+			if (cols.length < 2) return;
+
+			if (cols[1] == 'reset') {
+				nodes = JSON.parse(cols[2]);
+				d3.selectAll('.message').remove();
+				updateNodes();
+
+			} else if (cols[3] == 'measure') {
+				let n = findNodeByName(cols[1]);
+				n.source = true;
+				n.reached = true;
+				updateNodes();
+
+			} else if (cols[3] == 'receive' || cols[3] == 'drop') {
+				let from = findNodeByName(cols[2]),
+					to = findNodeByName(cols[1]);
+
+				to.reached = true;
+				to.dropped = (cols[3] == 'drop');
+				updateNodes();
+
+				d3.select('.messages')
+					.append('line')
+					.classed('message', true)
+					.attr('id', `message-${from.id}-${to.id}`)
+					.attr('x1', xTransf(from.x))
+					.attr('y1', yTransf(from.y))
+					.attr('x2', xTransf(from.x))
+					.attr('y2', yTransf(from.y))
+					.transition()
+					.attr('x2', xTransf(to.x))
+					.attr('y2', yTransf(to.y));
+			}
+		});
+
+		setupButtons('.btn-toolbar', () => {
+			nodes.forEach(e => {
+				e.source = false;
+				e.reached = false;
+				e.dropped = false;
+			});
+			d3.selectAll('.message').remove();
+			updateNodes();
+		});
+	</script>
+</body>
+
+</html>
