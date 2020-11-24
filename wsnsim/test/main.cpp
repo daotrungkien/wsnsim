@@ -1,9 +1,10 @@
 #include "test1.h"
 #include "test2.h"
 #include "test3.h"
-//#include "test4.h"
+#include "test4.h"
+#include "test_phuong_phd_scenario1.h"
 
-namespace the_test = test2;
+namespace the_test = test_phuong_phd_scenario1;
 
 
 using namespace std;

@@ -26,6 +26,8 @@ namespace test2 {
 	class controller_measure_then_sleep : public basic_controller {
 	public:
 		void init() override {
+			basic_controller::init();
+
 			auto node = get_node();
 
 			node->on(basic_sensor::event_measure, [node](event& ev, any value, double time) {
@@ -92,19 +94,19 @@ namespace test2 {
 				set_hops_to_live(5);
 
 				set_loss_rate(0.1);
-				});
+			});
 		}
 	};
 
 
 	class temp_node : public generic_node<
 		custom_comm,
-		sensor::with_noise<sensor::with_ambient>,
+		sensor::with_noise<sensor::with_ambient<basic_sensor>>,
 		battery::none,
 		power::none,
 		controller_measure_then_sleep> {
 	public:
-		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
+		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient<basic_sensor>>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
 	};
 
 
@@ -161,7 +163,7 @@ namespace test2 {
 
 
 			json jarr = json::array();
-			for (auto& node : wsn->get_nodes()) {
+			for (const auto& node : wsn->get_nodes()) {
 				auto& l = node->get_location();
 				jarr.push_back({
 					{"id", node->get_id()},

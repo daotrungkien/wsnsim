@@ -24,7 +24,7 @@ namespace test1 {
 		chrono::duration<double> sampling_time;
 
 	public:
-		virtual void init();
+		void init() override;
 
 		template <typename _Rep, typename _Period>
 		void set_sampling_time(chrono::duration<_Rep, _Period> st) {
@@ -35,18 +35,20 @@ namespace test1 {
 
 	class simple_node : public generic_node<
 		comm::none,
-		sensor::with_noise<sensor::with_ambient>,
+		sensor::with_noise<sensor::with_ambient<basic_sensor>>,
 		battery::linear,
 		power::solar,
 		controller_measure_then_sleep> {
 	public:
-		using generic_node<comm::none, sensor::with_noise<sensor::with_ambient>, battery::linear, power::solar, controller_measure_then_sleep>::generic_node;
+		using generic_node<comm::none, sensor::with_noise<sensor::with_ambient<basic_sensor>>, battery::linear, power::solar, controller_measure_then_sleep>::generic_node;
 	};
 
 
 
 	inline void controller_measure_then_sleep::init()
 	{
+		basic_controller::init();
+
 		auto node = get_node();
 		node->on(basic_battery::event_full, [this](event&) {
 			is_charging = false;
@@ -58,16 +60,15 @@ namespace test1 {
 		});
 
 		node->on_self(entity::event_first_start, [this, node](event& ev) {
-			timer(sampling_time, true, [this](event& ev) {
-				auto node1 = get_node<simple_node>();
-				auto battery = node1->get_battery();
+			timer(sampling_time, true, [this, node](event& ev) {
+				auto battery = node->get_battery();
 
 				if (is_charging) {
 					battery->charge(sampling_time.count());
 				}
 
 				if (battery->consume(sampling_time.count()))
-					node1->get_sensor()->measure();
+					node->get_sensor()->measure();
 				});
 		});
 	}

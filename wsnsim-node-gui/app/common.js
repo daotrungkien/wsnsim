@@ -25,14 +25,17 @@ function initGui(html) {
 	app.on('ready', () => {
 		win = new BrowserWindow({
 			width: 750,
-			height: 800,
-			alwaysOnTop: true
+			height: 800
 		})
 		win.loadURL(url.format({
 			pathname: path.join(__dirname, `../html/${html}.html`),
 			protocol: 'file:',
 			slashes: true
 		}))
+
+		ipcMain.on('on-top', (event, onTop) => {
+			win.setAlwaysOnTop(onTop);
+		});
 	});
 
 	app.on('window-all-closed', function () {

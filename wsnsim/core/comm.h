@@ -594,7 +594,7 @@ namespace wsn::comm {
 		header& prepare_message(message_type type, std::vector<uchar>& data) {
 			header hdr;
 			hdr.msg_type = type;
-			hdr.send_time = this->get_global_clock_time();
+			hdr.send_time = this->get_world_clock_time();
 			this->add_header(data, hdr);
 
 			return this->extract_header<header>(data);
@@ -622,11 +622,12 @@ namespace wsn::comm {
 			if (!wrapped_comm_type::receive(data, from)) return false;
 
 			auto& hdr = this->extract_header<header>(*data);
+			auto& hdr_data = std::get<notify_root_data_type>(hdr.data);
 			if (hdr.msg_type == message_type::notify_root) {
-				if (hdr.data.notify_root.root_id < root_id) {
+				if (hdr_data.root_id < root_id) {
 					i_am_root = false;
-					root_id = hdr.data.notify_root.root_id;
-					cost_to_root = hdr.cost + this->get_global_clock_time() - hdr.send_time;
+					root_id = hdr_data.root_id;
+					cost_to_root = hdr_data.cost + this->get_world_clock_time() - hdr.send_time;
 					parent = from;
 
 					std::vector<uchar> data2;
@@ -635,12 +636,12 @@ namespace wsn::comm {
 					hdr2_data.child_id = this->get_node()->get_id();
 					wrapped_comm_type::send(data2, parent);
 
-					std::vector<uchar> data;
-					auto& hdr = prepare_message(message_type::notify_root, data);
-					auto& hdr_data = std::get<notify_root_data_type>(hdr.data);
-					hdr_data.root_id = root_id;
-					hdr_data.cost = 0.;
-					this->broadcast_by_distance(data, 5);
+					std::vector<uchar> data3;
+					auto& hdr3 = prepare_message(message_type::notify_root, data3);
+					auto& hdr3_data = std::get<notify_root_data_type>(hdr3.data);
+					hdr3_data.root_id = root_id;
+					hdr3_data.cost = 0.;
+					this->broadcast_by_distance(data3, 5);
 				}
 				else {
 					std::vector<uchar> data2;

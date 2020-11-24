@@ -67,7 +67,7 @@
 </head>
 
 <body>
-	<div class="container my-4">
+	<div class="container my-4" id="content">
 		<h1>wsnsim: Test 2</h1>
 
 		<div>
@@ -88,13 +88,13 @@
 				</svg>
 			</div>
 
-			<div class="btn-toolbar">
-			</div>
+			<div id="buttons-container"></div>
 		</div>
 	</div>
 
 	<script>
 		let nodes = [];
+		let nextEventObj = null;
 
 		function findNodeById(id) {
 			return nodes.find(e => e.id == id);
@@ -136,22 +136,30 @@
 		vaxis(0, 0, 30, linearScale(0, 30, 2));
 
 
-		setLogProcessor(msg => {
-			const cols = msg.split('\t');
+		setLogProcessor((event, isNext) => {
+			if (nextEventObj) nextEventObj.remove();
+
+			const cols = event.msg.split('\t');
 			if (cols.length < 2) return;
 
 			if (cols[1] == 'reset') {
+				if (isNext) return;
+
 				nodes = JSON.parse(cols[2]);
 				d3.selectAll('.message').remove();
 				updateNodes();
 
 			} else if (cols[3] == 'measure') {
+				if (isNext) return;
+
 				let n = findNodeByName(cols[1]);
 				n.source = true;
 				n.reached = true;
 				updateNodes();
 
 			} else if (cols[3] == 'receive' || cols[3] == 'drop') {
+				if (isNext) return;
+
 				let from = findNodeByName(cols[2]),
 					to = findNodeByName(cols[1]);
 
@@ -173,7 +181,7 @@
 			}
 		});
 
-		setupButtons('.btn-toolbar', () => {
+		setupButtons('#buttons-container', () => {
 			nodes.forEach(e => {
 				e.source = false;
 				e.reached = false;

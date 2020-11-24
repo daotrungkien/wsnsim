@@ -71,9 +71,11 @@
     <ClInclude Include="test3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="test_phuong_phd_scenario1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="ClassDiagram.cd" />
     <None Include="test4.h">
       <Filter>Header Files</Filter>
     </None>

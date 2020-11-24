@@ -28,6 +28,7 @@ function exportSvg(svg, hiddenAnchor) {
 	var a = hiddenAnchor[0];
 	a.href = 'data:image/svg+xml; charset=utf8, ' + encodeURIComponent(svgData.replace(/></g, '>\n\r<'));
 	a.download = 'wsnsim.svg';
+	a.title = 'Export figure';
 	a.click();
 };
 
@@ -194,20 +195,22 @@ function setLogProcessor(func) {
 	logProcessor = func;
 
 	ipcRenderer.on('log', (event, msg) => {
-		func(msg);
-		storeLogMessage(msg);
+		let e = storeLogMessage(msg);
+		playLogMessage(e);
 	});
 }
 
 function storeLogMessage(msg) {
 	let i = msg.indexOf('\t');
-	logContent.push({
+	let e = {
 		time: parseFloat(msg.slice(0, i)),
 		msg
-	});
+	};
+	logContent.push(e);
+	return e;
 }
 
-function loadLogFile(finishedCallback) {
+function loadLogFile() {
 	dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), {
 		properties: ['openFile'],
 		defaultPath: './',
@@ -216,20 +219,14 @@ function loadLogFile(finishedCallback) {
 			{ name: 'All Files', extensions: ['*'] }
 		],
 	}, files => {
-		if (!files || files.length != 1)  {
-			if (finishedCallback) finishedCallback(false);
-			return;
-		}
+		if (!files || files.length != 1)  return;
 		
 		logContent = [];
 		readline.createInterface({
 			input: fs.createReadStream(files[0]),
 			output: process.stdout,
 			console: false
-		}).on('line', storeLogMessage)
-		.on('close', () => {
-			if (finishedCallback) finishedCallback(true);
-		});
+		}).on('line', storeLogMessage);
 	});
 }
 
@@ -251,15 +248,24 @@ function pauseReplayLogFile(paused = true) {
 	logReplayPaused = paused;
 }
 
-function nextReplayLogFile() {
-	logProcessor(logContent[logReplayIdx].msg);
-	if (++logReplayIdx == logContent.length) stopReplayLogFile();
+function replayNextLogFileMessage() {
+	logReplayIdx++;
+	let isLast = (logReplayIdx == logContent.length);
+
+	playLogMessage(logContent[logReplayIdx-1], isLast ? null : logContent[logReplayIdx]);
+	if (isLast) stopReplayLogFile();
 }
 
 function stopReplayLogFile() {
 	clearInterval(logReplayTimer);
 	logReplayTimer = null;
 	onReplayLogFileFinished();
+}
+
+function playLogMessage(cur, next = null) {
+	$('#label-log-message').html(cur.msg + (next ? `<br/><span class="text-secondary">${next.msg}</span>` : ''));
+	logProcessor(cur, false);
+	if (next) logProcessor(next, true);
 }
 
 function onReplayLogFileFinished() {
@@ -279,34 +285,38 @@ function replayLogFile() {
 
 	logReplayTimer = setInterval(() => {
 		if (isLogReplayPaused()) return;
-		nextReplayLogFile();
+		replayNextLogFileMessage();
 	}, 100);
 }
 
 function setupButtons(toolbar, onClearCanvasFunc) {
 	$(toolbar).html(`
-		<div class="btn-group mr-1">
-			<button class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
+		<div class="btn-toolbar">
+			<div class="btn-group mr-1">
+				<button class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
 
-			<button class="btn btn-sm btn-danger dropdown-toggle" data-toggle="dropdown"></button>
-			<div class="dropdown-menu">
-				<button class="dropdown-item" id="btn-clear-log">Clear log</button>
+				<button class="btn btn-sm btn-danger dropdown-toggle" data-toggle="dropdown"></button>
+				<div class="dropdown-menu">
+					<button class="dropdown-item" id="btn-clear-log">Clear log</button>
+				</div>
+
+				<button class="btn btn-sm btn-secondary" id="btn-load-file">Load file...</button>
 			</div>
 
-			<button class="btn btn-sm btn-secondary" id="btn-load-file">Load file...</button>
+			<div class="btn-group mr-auto">
+				<button class="btn btn-sm btn-secondary" id="btn-replay">Replay</button>
+				<button class="btn btn-sm btn-secondary" id="btn-replay-pause" disabled>Pause</button>
+				<button class="btn btn-sm btn-secondary" id="btn-replay-next" disabled>Next</button>
+			</div>
+
+			<div class="btn-group">
+				<button class="btn btn-sm btn-secondary" id="btn-export">Export</button>
+			</div>
+
+			<a class="d-none" id="btn-download">Download</a>
 		</div>
 
-		<div class="btn-group mr-auto">
-			<button class="btn btn-sm btn-secondary" id="btn-replay">Replay</button>
-			<button class="btn btn-sm btn-secondary" id="btn-replay-pause" disabled>Pause</button>
-			<button class="btn btn-sm btn-secondary" id="btn-replay-next" disabled>Next</button>
-		</div>
-
-		<div class="btn-group">
-			<button class="btn btn-sm btn-secondary" id="btn-export">Export</button>
-		</div>
-
-		<a class="d-none" id="btn-download">Download</a>`);
+		<p id="label-log-message" style="white-space:nowrap; width:100%; overflow-x:hidden"></p>`);
 
 	$('#btn-export').click(() => exportSvg($(".canvas"), $("#btn-download")));
 
@@ -349,11 +359,17 @@ function setupButtons(toolbar, onClearCanvasFunc) {
 		}
 	});
 
-	$('#btn-replay-next').click(nextReplayLogFile);
+	$('#btn-replay-next').click(replayNextLogFileMessage);
 }
 
 $(function () {
 	$('body').tooltip({
 		selector: '[data-toggle="tooltip"]'
+	});
+
+	$('<button class="btn btn-sm btn-secondary float-right">Top</button>').prependTo('#content').click(event => {
+		let onTop = $(event.target).hasClass('btn-warning');
+		$(event.target).toggleClass('btn-warning');
+		ipcRenderer.send('on-top', !onTop);
 	});
 })

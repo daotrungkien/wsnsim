@@ -28,7 +28,9 @@ namespace test4 {
 		chrono::duration<double> sampling_time;
 
 	public:
-		virtual void init() {
+		void init() override {
+			basic_controller::init();
+
 			auto node = get_node();
 
 			node->on(basic_sensor::event_measure, [node](event& ev, any value, double time) {
@@ -107,12 +109,12 @@ namespace test4 {
 
 	class temp_node : public generic_node<
 		custom_comm,
-		sensor::with_noise<sensor::with_ambient>,
+		sensor::with_noise<sensor::with_ambient<basic_sensor>>,
 		battery::none,
 		power::none,
 		controller_measure_then_sleep> {
 	public:
-		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
+		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient<basic_sensor>>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
 	};
 
 

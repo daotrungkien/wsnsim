@@ -10,6 +10,7 @@ tdata = textscan(file, '%f %s %f');
 fclose(file);
 
 
+global nodes colors max_levels charge_level
 fig = createplot(tmax, lmax)
 
 
@@ -39,7 +40,7 @@ box on
 
 
 for n = 1:3
-    cl = charge_level*max_levels(n);
+    cl = charge_level * max_levels(n);
     plot([0 tmax], [cl cl], 'Color', colors{n}, 'LineWidth', 1, 'LineStyle', '--', 'DisplayName', [nodes{n} ' threshold']);
 end
 
@@ -87,6 +88,8 @@ box on
 %% createplot
 
 function fig = createplot(tmax, lmax)
+    global nodes colors max_levels charge_level
+
     fig = figure;
     hold on
 

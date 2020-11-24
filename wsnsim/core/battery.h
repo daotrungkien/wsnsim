@@ -118,13 +118,12 @@ namespace wsn::battery {
 			return maxl;
 		}
 
-		void set_level(double l) {
-			level = l;
+		double get_level() const {
+			return level;
 		}
 
-		void set_rates(double charge, double consume) {
-			charge_rate = charge;
-			consume_rate = consume;
+		void set_level(double l) {
+			level = l;
 		}
 
 		double get_charge_rate() const {
@@ -134,13 +133,27 @@ namespace wsn::battery {
 		double get_consume_rate() const {
 			return consume_rate;
 		}
+
+		void set_charge_rate(double r) {
+			charge_rate = r;
+		}
+
+		void set_consume_rate(double r) {
+			consume_rate = r;
+		}
+
+		void set_rates(double charge, double consume) {
+			charge_rate = charge;
+			consume_rate = consume;
+		}
+
 	};
 
 
 
 	class chemical : public basic_battery {
 	public:
-		enum battery_type {
+		enum class battery_type : uchar {
 			lithium,
 			nikel_cadminum,
 			nikel_mh
@@ -156,7 +169,7 @@ namespace wsn::battery {
 
 	public:
 		chemical() {
-			type = lithium;
+			type = battery_type::lithium;
 			set_norminal_voltage(1.5);
 			set_load(1);
 			set_rated_capacity(6500);
@@ -185,13 +198,13 @@ namespace wsn::battery {
 			Q_rated = c;
 
 			switch (type) {
-			case lithium:
+			case battery_type::lithium:
 				Qmax = Q_rated;
 				break;
-			case nikel_cadminum:
+			case battery_type::nikel_cadminum:
 				Qmax = 1.1364 * Q_rated;
 				break;
-			case nikel_mh:
+			case battery_type::nikel_mh:
 				Qmax = 1.07692 * Q_rated;
 				break;
 			}
@@ -282,6 +295,5 @@ namespace wsn::battery {
 			}
 		}
 	};
-
 
 }

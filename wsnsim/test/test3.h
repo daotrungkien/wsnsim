@@ -28,6 +28,8 @@ namespace test3 {
 
 	public:
 		void init() override {
+			basic_controller::init();
+
 			auto node = get_node();
 
 			node->on(basic_sensor::event_measure, [node](event& ev, any value, double time) {
@@ -102,12 +104,12 @@ namespace test3 {
 
 	class temp_node : public generic_node<
 		custom_comm,
-		sensor::with_noise<sensor::with_ambient>,
+		sensor::with_noise<sensor::with_ambient<basic_sensor>>,
 		battery::none,
 		power::none,
 		controller_measure_then_sleep> {
 	public:
-		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
+		using generic_node<custom_comm, sensor::with_noise<sensor::with_ambient<basic_sensor>>, battery::none, power::none, controller_measure_then_sleep>::generic_node;
 	};
 
 
@@ -205,7 +207,7 @@ namespace test3 {
 
 
 			json jarr = json::array();
-			for (auto& node : wsn->get_nodes()) {
+			for (const auto& node : wsn->get_nodes()) {
 				auto& l = node->get_location();
 				jarr.push_back({
 					{"id", node->get_id()},
@@ -251,6 +253,17 @@ namespace test3 {
 				}
 
 				node->get_sensor()->measure();
+			});
+
+			add_command("set-loss-rate", [this](auto& cmd, auto& args) {
+				if (args.size() != 1) {
+					cout << cmd << " loss-rate" << endl;
+					return;
+				}
+
+				world->get_network()->each_node([rate = stod(args[0])](auto node) {
+					dynamic_pointer_cast<temp_node>(node)->get_comm_t()->set_loss_rate(rate);
+				});
 			});
 		}
 

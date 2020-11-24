@@ -141,9 +141,9 @@
     <ClInclude Include="test2.h" />
     <ClInclude Include="test3.h" />
     <ClInclude Include="common.h" />
+    <ClInclude Include="test_phuong_phd_scenario1.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="ClassDiagram.cd" />
     <None Include="test4.h" />
   </ItemGroup>
   <ItemGroup>

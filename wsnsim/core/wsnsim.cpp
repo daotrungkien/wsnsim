@@ -238,7 +238,7 @@ namespace wsn {
 
 	double entity::get_local_clock_time() const
 	{
-		assert(started);
+		if (!started) throw std::logic_error("clock not started");
 		return get_world()->get_clock().clock_now() - start_time;
 	}
 

@@ -253,7 +253,7 @@ namespace wsn {
 		}
 
 		void start() {
-			assert(!started);
+			if (started) return;
 
 			sys_start_time = std::chrono::system_clock::now();
 			if (ref_same_as_sys) ref_start_time = sys_start_time;
@@ -265,8 +265,6 @@ namespace wsn {
 		}
 
 		void stop() {
-			assert(started);
-
 			started = false;
 		}
 
@@ -283,7 +281,7 @@ namespace wsn {
 		}
 
 		std::chrono::system_clock::time_point reference2system(std::chrono::system_clock::time_point t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			double dt = std::chrono::duration<double>(t - ref_start_time).count();
 			auto sdt = std::chrono::duration<double>(dt / scale);
@@ -291,7 +289,7 @@ namespace wsn {
 		}
 
 		std::chrono::system_clock::time_point system2reference(std::chrono::system_clock::time_point t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			double dt = std::chrono::duration<double>(t - sys_start_time).count();
 			auto sdt = std::chrono::duration<double>(dt * scale);
@@ -299,53 +297,53 @@ namespace wsn {
 		}
 
 		std::chrono::system_clock::time_point clock2reference(double t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return ref_start_time + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::duration<double>(t));
 		}
 
 		double reference2clock(std::chrono::system_clock::time_point t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return (std::chrono::duration_cast<std::chrono::duration<double>>(t - ref_start_time)).count();
 		}
 
 		std::chrono::system_clock::time_point clock2system(double t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return sys_start_time + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::duration<double>(t / scale));
 		}
 
 		double system2clock(std::chrono::system_clock::time_point t) const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return std::chrono::duration_cast<std::chrono::duration<double>>(t - sys_start_time).count() * scale;
 		}
 
 		std::chrono::system_clock::time_point system_now() const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return std::chrono::system_clock::now();
 		}
 
 		std::chrono::system_clock::time_point reference_now() const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return system2reference(std::chrono::system_clock::now());
 		}
 
 		double clock_now() const {
-			assert(started);
+			if (!started) throw std::logic_error("clock not started");
 
 			return system2clock(std::chrono::system_clock::now());
 		}
 
 
 		static std::chrono::system_clock::time_point mktime(int year, int mon, int day, int hour = 0, int minute = 0, int sec = 0) {
-			tm tinf;
+			tm tinf = {};
 			tinf.tm_year = year - 1900;
 			tinf.tm_mon = mon - 1;
-			tinf.tm_mday = day - 1;
+			tinf.tm_mday = day;
 			tinf.tm_hour = hour;
 			tinf.tm_min = minute;
 			tinf.tm_sec = sec;
@@ -465,10 +463,10 @@ namespace wsn {
 
 		std::shared_ptr<entity> get_parent() const {
 			auto sp = parent.lock();
-			assert(sp);
 			return sp;
 		}
 
+		// sync_start_stop: the start/stop events will be taken into account in the management of the timer or not
 		template <typename _Rep, typename _Period>
 		uint timer(std::chrono::duration<_Rep, _Period> dur, bool sync_start_stop, std::function<bool(event&)> callback) {
 			auto inf = std::make_shared<timer_info>();
@@ -533,7 +531,6 @@ namespace wsn {
 				}).detach();
 			}
 			catch (...) {
-				std::cout << "-------------------" << std::endl;
 			}
 
 			return inf->key;
@@ -650,6 +647,8 @@ namespace wsn {
 		virtual void start();
 
 		virtual void stop() {
+			if (!started) return;
+
 			started = false;
 			fire(event_stop);
 		}
@@ -676,17 +675,14 @@ namespace wsn {
 
 		std::shared_ptr<basic_node> get_node() const {
 			auto sp = node.lock();
-			assert(sp);
 			return sp;
 		}
 
 		template <typename node_type>
 		std::shared_ptr<node_type> get_node() const {
 			auto sp = node.lock();
-			assert(sp);
 
 			auto sp2 = std::dynamic_pointer_cast<node_type>(sp);
-			assert(sp2);
 			return sp2;
 		}
 
@@ -772,7 +768,6 @@ namespace wsn {
 
 	public:
 		static inline const uint event_measure = unique_id();
-
 
 		basic_sensor() {
 			last_time = -1.;
@@ -866,7 +861,6 @@ namespace wsn {
 
 		std::shared_ptr<basic_network> get_network() const {
 			auto sp = network.lock();
-			assert(sp);
 			return sp;
 		}
 
@@ -1103,13 +1097,11 @@ namespace wsn {
 
 		std::shared_ptr<basic_world> get_world() override {
 			auto sp = world.lock();
-			assert(sp);
 			return sp;
 		}
 
 		std::shared_ptr<const basic_world> get_world() const override {
 			auto sp = world.lock();
-			assert(sp);
 			return sp;
 		}
 
@@ -1136,13 +1128,11 @@ namespace wsn {
 
 		std::shared_ptr<basic_world> get_world() override {
 			auto sp = world.lock();
-			assert(sp);
 			return sp;
 		}
 
 		std::shared_ptr<const basic_world> get_world() const override {
 			auto sp = world.lock();
-			assert(sp);
 			return sp;
 		}
 
