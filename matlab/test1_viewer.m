@@ -1,5 +1,5 @@
 trial = 1;
-path = '..\\Debug\\';
+path = '..\\Debug\\result2\\';
 
 lmax = 40000;
 tmax = 180;
@@ -9,9 +9,12 @@ file = fopen(sprintf([path 'wsnsim-log-test1-trial-%d.txt'], trial));
 tdata = textscan(file, '%f %s %f');
 fclose(file);
 
+figure
+
+%%
 
 global nodes colors max_levels charge_level
-fig = createplot(tmax, lmax)
+fig = createplot(tmax, lmax, 211)
 
 
 t = {};
@@ -50,7 +53,7 @@ end
 te = {};
 e = {};
 
-fig = createplot(tmax, lmax)
+fig = createplot(tmax, lmax, 212)
 
 for n = 1:3
     te{n} = [];
@@ -87,14 +90,14 @@ box on
 
 %% createplot
 
-function fig = createplot(tmax, lmax)
+function fig = createplot(tmax, lmax, spnum)
     global nodes colors max_levels charge_level
 
-    fig = figure;
+    fig = subplot(spnum);
     hold on
 
-    sunrise = 5 + 15/60 - 5;
-    sunset = 18 + 33/60 - 5;
+    sunrise = 5.5;
+    sunset = 18.3;
     nodes = {'temperature', 'humidity', 'light'};
     colors = {'red', 'green', 'blue'};
     max_levels = [3500, 4000, 2500];

@@ -126,7 +126,7 @@
     <ClCompile Include="..\core\wsnsim.cpp" />
     <ClCompile Include="..\lib\spa\spa.c" />
     <ClCompile Include="common.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="main_test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\core\ambient.h" />

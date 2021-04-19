@@ -126,6 +126,12 @@ namespace wsn::battery {
 			level = l;
 		}
 
+		void set_level_delta(double dl) {
+			double l = level + dl;
+			if (l > maxl) l = maxl;
+			if (l < minl) l = minl;
+		}
+
 		double get_charge_rate() const {
 			return charge_rate;
 		}

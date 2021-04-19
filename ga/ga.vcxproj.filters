@@ -24,12 +24,15 @@
     <ClInclude Include="ga_scenario1.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ga_test.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="..\wsnsim\test\common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\wsnsim\test\common.cpp">
+    <ClCompile Include="main_ga.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

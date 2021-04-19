@@ -39,10 +39,12 @@ public:
 		init_log_file();
 	}
 
-	void log(std::string msg);
+	void log(std::string msg, bool check_clock = true);
 };
 
 extern logging logger;
+
+
 
 
 class test_case {

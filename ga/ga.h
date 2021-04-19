@@ -5,6 +5,31 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <fstream>
+
+#include "../wsnsim/lib/utilities.h"
+
+
+
+class ga_logging {
+protected:
+	std::ofstream file;
+
+public:
+	ga_logging() {
+		auto filename = kutils::formatstr("ga-log-%s.txt", kutils::format_time(time(nullptr), "%Y%m%d%H%M").c_str());
+		file.open(filename, std::ios::out);
+
+		if (!file) std::cout << "GA log file creation failed: " << filename << std::endl;
+	}
+
+	void log(std::string msg) {
+		std::cout << msg << std::endl;
+		file << msg << std::endl;
+	}
+};
+
+extern ga_logging ga_logger;
 
 
 
@@ -29,7 +54,8 @@ protected:
 	std::piecewise_linear_distribution<double> mate_rand_dist;
 
 public:
-	virtual individual initial_individual() = 0;
+	virtual std::vector<individual> initial_population() = 0;
+	virtual bool identical(const individual& idv1, const individual& idv2) { return false; }
 	virtual individual mate(const individual& idv1, const individual& idv2) = 0;
 	virtual double eval_fitness(const individual& idv) = 0;
 
@@ -45,12 +71,13 @@ public:
 		auto minf = std::min_element(current_fitness.begin(), current_fitness.end());
 		int minf_idx = minf - current_fitness.begin();
 
-		std::cout << "Epoch #" << generation << ":" << std::endl
-			<< "- Fitness (min, mean, max): "
-			<< *minf << ", "
-			<< std::accumulate(current_fitness.begin(), current_fitness.end(), 0.) / population.size() << ", "
-			<< *std::max_element(current_fitness.begin(), current_fitness.end()) << std::endl
-			<< "- Min gnome: " << individual2string(population[minf_idx]) << std::endl;
+		ga_logger.log(kutils::formatstr(
+			"- Fitness (min, mean, max): %g, %g, %g\n"
+			"- Min gnome: %s",
+			*minf,
+			std::accumulate(current_fitness.begin(), current_fitness.end(), 0.) / population.size(),
+			*std::max_element(current_fitness.begin(), current_fitness.end()),
+			individual2string(population[minf_idx]).c_str()));
 	}
 
 public:
@@ -77,17 +104,23 @@ public:
 
 
 	std::pair<individual, double> run() {
-		population.clear();
-		population.push_back(initial_individual());
+		population = initial_population();
 
 		std::vector<std::pair<int, double>> fitness_info;
 
 		stall_generations = 0;
 
 		for (generation = 1; !check_termination(); generation++) {
+			unsigned int true_population_size = population.size();
+
 			previous_fitness = current_fitness;
 
-			unsigned int true_population_size = population.size();
+			ga_logger.log(kutils::formatstr("Epoch #%d:", generation));
+
+			for (unsigned int i = 0; i < true_population_size; i++) {
+				ga_logger.log(kutils::formatstr("- Gnome #%d: %s", i, individual2string(population[i]).c_str()));
+			}
+			
 			fitness_info.resize(true_population_size);
 			current_fitness.resize(true_population_size);
 
@@ -96,7 +129,10 @@ public:
 				double f = eval_fitness(population[i]);
 				fitness_info[i] = std::make_pair(i, f);
 				current_fitness[i] = f;
+
+				std::cout << "#" << i << "=" << f << " ";
 			}
+			std::cout << std::endl;
 
 			if (generation > 1) {
 				auto prev_minf = std::min_element(previous_fitness.begin(), previous_fitness.end());
@@ -108,7 +144,8 @@ public:
 
 			post_process();
 
-			int selection_size = (int)(selection_rate * true_population_size);
+			unsigned int selection_size = (unsigned int)(selection_rate * population_size);
+			if (selection_size > true_population_size) selection_size = true_population_size;
 
 			// sort individuals by fitness
 			std::sort(fitness_info.begin(), fitness_info.end(), [](auto& a, auto& b) {
@@ -116,18 +153,29 @@ public:
 			});
 
 			// mutation and crossover
-			for (int i = 0; i < population_size - selection_size; i++) {
+			for (unsigned int i = 0; i < population_size - selection_size; i++) {
 				int f1 = (int)(mate_rand_dist(rand_gen) * true_population_size),
 					f2 = (int)(mate_rand_dist(rand_gen) * true_population_size);
 				new_population.push_back(mate(population[f1], population[f2]));
 			}
 
 			// selection
-			for (int i = selection_size - 1; i >= 0; i--) {
+			for (unsigned int i = 0; i < selection_size; i++) {
 				int fi = fitness_info[i].first;
 				new_population.insert(new_population.begin(), std::move(population[fi]));
 			}
 			population.clear();
+
+			// filter duplicate individuals
+			for (unsigned int i = 0; i < new_population.size() - 1; i++) {
+				for (unsigned int j = i + 1; j < new_population.size(); j++) {
+					if (identical(new_population[i], new_population[j])) {
+						new_population.erase(new_population.begin() + j);
+						j--;
+					}
+				}
+			}
+
 			population.swap(new_population);
 		}
 

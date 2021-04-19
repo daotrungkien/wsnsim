@@ -12,7 +12,7 @@ void logging::init_log_file()
 	if (file.is_open()) file.close();
 
 	auto tc = test_case::instance;
-	auto filename = kutils::formatstr("wsnsim-log-%s-trial-%d.txt", tc->get_test_name().c_str(), tc->trial);
+	auto filename = kutils::formatstr("wsnsim-log-%s-trial-%d.txt", tc->get_test_name().c_str(), tc->trial); // kutils::format_time(time(nullptr), "%Y%m%d%H%M").c_str());
 	file.open(filename, std::ios::out);
 
 	if (!file) std::cout << "Log file creation failed: " << filename << std::endl;
@@ -32,10 +32,12 @@ void logging::init_zmq()
 }
 
 
-void logging::log(std::string msg)
+void logging::log(std::string msg, bool check_clock)
 {
 	auto tc = test_case::instance;
-	auto& clock = tc->world->get_clock();
+	auto& clock = tc->world->get_clock(); 
+	if (check_clock && !clock.is_started()) return;
+
 	auto s = kutils::formatstr("%.3f\t%s", clock.is_started() ? clock.clock_now() : -1., msg.c_str());
 
 	if (to_console) std::cout << s << std::endl;

@@ -9,8 +9,9 @@ file = fopen(sprintf([path 'wsnsim-log-phuong1-trial-%d.txt'], trial));
 tdata = textscan(file, '%f %s %f');
 fclose(file);
 
+%%
 
-global nodes colors max_levels
+global nodes colors
 fig = createplot(tmax, lmax)
 
 

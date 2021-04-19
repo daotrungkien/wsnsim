@@ -7,19 +7,20 @@ using namespace wsn;
 
 
 
-
-
-
 namespace test_phuong_phd_scenario1 {
-	const std::chrono::system_clock::time_point schedule_start = clock::mktime(2018, 5, 23, 0, 0, 0);
-	const double runtime_limit = 3600. * 24 * 3;
+	const std::chrono::system_clock::time_point schedule_start = clock::mktime(2020, 5, 23, 0, 0, 0);
+	const double runtime_limit = 3600. * 24 * 3;	// s
 
-	const double battery_max_level = 3500 * 3.6;
-	const double battery_initial = .7 * battery_max_level;
+	const double battery_max_level[] = { 3500 * 3.6, 3500 * 3.6 * 1.5, 3500 * 3.6 * 2 };
+	const double battery_initial = .7 * battery_max_level[0];
 
 	const double battery_charge_rate = .8;				// W
-	const double battery_discharge_rate_active = .17;	// W
+	const double battery_discharge_rate_active = .26;	// W
 	const double battery_discharge_rate_inactive = .05;	// W
+	const double battery_discharge_activate = 1.28;		// Ws
+	const double battery_discharge_sleep = 0.97;		// Ws
+
+	uint sensor_nodes = 0;
 
 	const string filename_input = "scenario1-schedule.dat";
 	const string filename_output = "scenario1-result.dat";
@@ -50,30 +51,47 @@ namespace test_phuong_phd_scenario1 {
 			{}
 		};
 
-		vector<interval> node1;
+		vector<vector<interval>> node_schedules;
 
-		void set(const vector<interval>& _node1) {
-			node1 = _node1;
+
+		network_schedule() {
+			init_default();
+		}
+
+		network_schedule(const char* chromosome) {
+			set(chromosome);
+		}
+
+		void set(uint node_idx, const vector<interval>& s) {
+			node_schedules[node_idx] = s;
 		}
 
 		void set(const string& chromosome) {
-			node1.clear();
+			auto node_chromosomes = kutils::split(chromosome, ";");
+			if (node_chromosomes.size() != sensor_nodes) throw runtime_error(kutils::formatstr("Chromosome not correct: %s", chromosome.c_str()));
 
-			auto a = kutils::split(chromosome);
-			for (unsigned int i = 0; i < a.size(); i++) {
-				string s = a[i];
+			node_schedules.resize(sensor_nodes);
+			for (uint node_idx = 0; node_idx < sensor_nodes; node_idx++) {
+				node_schedules[node_idx].clear();
 
-				interval t;
-				t.active = s.back() == '+';
-				if (t.active) s.erase(s.end() - 1);
+				auto a = kutils::split(node_chromosomes[node_idx]);
+				for (uint i = 0; i < a.size(); i++) {
+					string s = a[i];
 
-				t.start = stod(s);
+					interval t;
+					t.active = s.back() == '+';
+					if (t.active) s.erase(s.end() - 1);
 
-				node1.push_back(t);
+					t.start = stod(s);
+
+					node_schedules[node_idx].push_back(t);
+				}
 			}
 		}
 
 		void init_default() {
+			node_schedules.resize(sensor_nodes);
+
 			vector<interval> x;
 
 			bool active = false;
@@ -81,26 +99,32 @@ namespace test_phuong_phd_scenario1 {
 				x.push_back(interval(i * 60., active));
 			}
 
-			set(x);
+			for (uint i = 0; i < node_schedules.size(); i++) {
+				set(i, x);
+			}
 		}
 
 		void save() const {
 			ofstream file(filename_input, ios::binary);
 
-			unsigned int n = node1.size();
-			file.write((const char*)&n, sizeof(n));
+			for (auto& ns : node_schedules) {
+				uint n = ns.size();
+				file.write((const char*)&n, sizeof(n));
 
-			file.write((const char*)node1.data(), sizeof(interval) * n);
+				file.write((const char*)ns.data(), sizeof(interval) * n);
+			}
 		}
 
 		void restore() {
 			ifstream file(filename_input, ios::binary);
 
-			unsigned int n;
-			file.read((char*)&n, sizeof(n));
+			for (auto& ns : node_schedules) {
+				uint n;
+				file.read((char*)&n, sizeof(n));
 
-			node1.resize(n);
-			file.read((char*)node1.data(), sizeof(interval) * n);
+				ns.resize(n);
+				file.read((char*)ns.data(), sizeof(interval) * n);
+			}
 		}
 	};
 
@@ -108,7 +132,7 @@ namespace test_phuong_phd_scenario1 {
 	public:
 		double timestamp;
 		double value;
-		shared_ptr<basic_node> node;
+		uint node_idx;
 	};
 
 	static network_schedule global_schedule;
@@ -146,6 +170,8 @@ namespace test_phuong_phd_scenario1 {
 			
 			auto battery = std::dynamic_pointer_cast<battery::linear>(get_node()->get_battery());
 
+			battery->set_level_delta(active ? battery_discharge_activate : battery_discharge_sleep);
+
 			if (is_started()) {
 				auto now = get_reference_time();
 				battery->consume(chrono::duration_cast<chrono::duration<double>>(now - last_battery_update).count());
@@ -164,8 +190,19 @@ namespace test_phuong_phd_scenario1 {
 		battery::linear,
 		power::solar,
 		phuong_controller> {
+	protected:
+		uint node_idx = -1;
+
 	public:
 		using generic_node<comm::none, sensor::with_ambient<basic_sensor>, battery::linear, power::solar, phuong_controller>::generic_node;
+
+		void set_node_idx(uint i) {
+			node_idx = i;
+		}
+
+		uint get_node_idx() const {
+			return node_idx;
+		}
 	};
 
 
@@ -176,7 +213,8 @@ namespace test_phuong_phd_scenario1 {
 
 		set_active(false);
 
-		auto node = get_node();
+		auto node = std::dynamic_pointer_cast<phuong_node>(get_node());
+
 		node->on_self(entity::event_first_start, [this, node](event& ev) {
 			last_battery_update = get_reference_time();
 
@@ -184,13 +222,14 @@ namespace test_phuong_phd_scenario1 {
 				auto battery = node->get_battery();
 
 				auto now = get_reference_time();
-				auto t = now - last_battery_update;
 
 				battery->charge(sampling_time.count());
 
-				if (battery->consume(sampling_time.count())) {
+				if (battery->consume(chrono::duration_cast<chrono::duration<double>>(now - last_battery_update).count())) {
 					if (active) node->get_sensor()->measure();
 				}
+
+				last_battery_update = now;
 			});
 		});
 
@@ -198,9 +237,12 @@ namespace test_phuong_phd_scenario1 {
 			try {
 				auto now = get_reference_time();
 				auto now_t = chrono::system_clock::to_time_t(now);
-				double minutes = (now_t % (24 * 3600)) / 60.;	// number of minutes since 00:00 of the day
 
-				auto& schedule = global_schedule.node1;
+				tm ltime;
+				localtime_s(&ltime, &now_t);
+				double minutes = ltime.tm_hour * 60. + ltime.tm_min + ltime.tm_sec / 60.;	// number of minutes since 00:00 of the day
+
+				auto& schedule = global_schedule.node_schedules[node->get_node_idx()];
 				uint current_step = 0;
 				for (; current_step < schedule.size() - 1 && minutes > schedule[current_step + 1].start; current_step++);
 
@@ -250,17 +292,20 @@ namespace test_phuong_phd_scenario1 {
 
 			auto sn = world->get_network();
 
-			vector<shared_ptr<phuong_node>> nodes = {
-				sn->new_node<phuong_node>("S1", location(10, 10, 0))
-//				sn->new_node<phuong_node>("S2", location(100, 10, 0)),
-//				sn->new_node<phuong_node>("S3", location(10, 100, 0))
-			};
+			vector<shared_ptr<phuong_node>> nodes;
+			for (uint i = 0; i < sensor_nodes; i++) {
+				auto n = sn->new_node<phuong_node>(kutils::formatstr("S%d", i + 1).c_str(), location(0, 0, 0));
+				n->set_node_idx(i);
+				nodes.push_back(n);
+			}
 
-			for (auto& node : nodes) {
+			for (uint i = 0; i < sensor_nodes; i++) {
+				auto& node = nodes[i];
+
 				node->get_controller_t()->set_sampling_time(5min);
 
 				auto batt = node->get_battery_t();
-				batt->set_max_level(battery_max_level);
+				batt->set_max_level(battery_max_level[i]);
 				batt->set_level(battery_initial);
 				batt->set_rates(battery_charge_rate, battery_discharge_rate_inactive);
 
@@ -269,7 +314,7 @@ namespace test_phuong_phd_scenario1 {
 			}
 
 			sn->on(basic_sensor::event_measure, [](event& ev, std::any value, double time) {
-				auto n = dynamic_pointer_cast<basic_sensor>(ev.target)->get_node();
+				auto n = dynamic_pointer_cast<phuong_node>( dynamic_pointer_cast<basic_sensor>(ev.target)->get_node() );
 
 				lock_guard lock(writemx);
 				cout << format_time(n->get_reference_time()) << ": "
@@ -277,7 +322,7 @@ namespace test_phuong_phd_scenario1 {
 
 				measurement_info inf;
 				inf.timestamp = time;
-				inf.node = n;
+				inf.node_idx = n->get_node_idx();
 				inf.value = any_cast<double>(value);
 				measurements.push_back(inf);
 			});

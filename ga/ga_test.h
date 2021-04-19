@@ -9,11 +9,15 @@
 
 class ga_test : public ga<std::array<double, 2>> {
 public:
-	individual initial_individual() override {
+	std::vector<individual> initial_population() override {
+		std::vector<individual> p;
+		
 		individual a;
 		a[0] = (rand() % 1000 / 500. - 1.) * 10;
 		a[1] = (rand() % 1000 / 500. - 1.) * 10;
-		return move(a);
+		p.push_back(a);
+
+		return move(p);
 	}
 
 	individual mate(const individual& idv1, const individual& idv2) override {
