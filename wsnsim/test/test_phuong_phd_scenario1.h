@@ -168,9 +168,9 @@ namespace test_phuong_phd_scenario1 {
 			if (active == a) return;
 			active = a;
 			
-			auto battery = std::dynamic_pointer_cast<battery::linear>(get_node()->get_battery());
+			auto battery = std::dynamic_pointer_cast<battery::chemical>(get_node()->get_battery());
 
-			battery->set_level_delta(active ? battery_discharge_activate : battery_discharge_sleep);
+			battery->set_load(active ? battery_discharge_activate : battery_discharge_sleep);
 
 			if (is_started()) {
 				auto now = get_reference_time();
@@ -178,7 +178,7 @@ namespace test_phuong_phd_scenario1 {
 				last_battery_update = now;
 			}
 
-			battery->set_consume_rate(active ? battery_discharge_rate_active : battery_discharge_rate_inactive);
+			battery->set_load(active ? battery_discharge_rate_active : battery_discharge_rate_inactive);
 			fire(active ? event_active : event_inactive);
 		}
 	};
@@ -187,14 +187,14 @@ namespace test_phuong_phd_scenario1 {
 	class phuong_node : public generic_node<
 		comm::none,
 		sensor::with_ambient<basic_sensor>,
-		battery::linear,
+		battery::chemical,
 		power::solar,
 		phuong_controller> {
 	protected:
 		uint node_idx = -1;
 
 	public:
-		using generic_node<comm::none, sensor::with_ambient<basic_sensor>, battery::linear, power::solar, phuong_controller>::generic_node;
+		using generic_node<comm::none, sensor::with_ambient<basic_sensor>, battery::chemical, power::solar, phuong_controller>::generic_node;
 
 		void set_node_idx(uint i) {
 			node_idx = i;
@@ -305,9 +305,9 @@ namespace test_phuong_phd_scenario1 {
 				node->get_controller_t()->set_sampling_time(5min);
 
 				auto batt = node->get_battery_t();
-				batt->set_max_level(battery_max_level[i]);
-				batt->set_level(battery_initial);
-				batt->set_rates(battery_charge_rate, battery_discharge_rate_inactive);
+				batt->set_rated_capacity(battery_max_level[i]);
+//				batt->set_level(battery_initial);
+				batt->set_load(battery_charge_rate);
 
 				auto sensor = node->get_sensor_t();
 				sensor->set_ambient(ambient);
