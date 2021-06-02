@@ -359,6 +359,11 @@ namespace wsn {
 	public:
 		uint event_id;
 		std::shared_ptr<entity> target;
+		bool canceled = false;
+
+		void cancel_bubble() {
+			canceled = true;
+		}
 	};
 
 
@@ -631,8 +636,10 @@ namespace wsn {
 				(*function)(ev, args...);
 			}
 
-			auto parentsp = parent.lock();
-			if (parentsp) parentsp->fire(ev, args...);
+			if (!ev.canceled) {
+				auto parentsp = parent.lock();
+				if (parentsp) parentsp->fire(ev, args...);
+			}
 		}
 
 	public:
